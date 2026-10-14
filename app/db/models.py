@@ -53,7 +53,8 @@ class Contractor(Base):
     certifications: Mapped[list[str]] = mapped_column(JSON, default=list)
     designations: Mapped[list[str]] = mapped_column(JSON, default=list)
     specialties: Mapped[list[str]] = mapped_column(JSON, default=list)
-    enrolled_in_gaf_leads: Mapped[bool] = mapped_column(Boolean, default=False)
+    # None means GAF didn't say, which is different from "not enrolled".
+    enrolled_in_gaf_leads: Mapped[bool | None] = mapped_column(Boolean)
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     last_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
