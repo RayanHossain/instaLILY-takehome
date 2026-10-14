@@ -6,18 +6,8 @@ SQLite locally and on Postgres in production.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, MetaData, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-# Give every constraint a predictable name. Alembic's batch mode (needed for
-# SQLite) can only drop or alter constraints that have names.
-NAMING_CONVENTION = {
-    "ix": "ix_%(column_0_label)s",
-    "uq": "uq_%(table_name)s_%(column_0_name)s",
-    "ck": "ck_%(table_name)s_%(constraint_name)s",
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    "pk": "pk_%(table_name)s",
-}
 
 
 def utc_now() -> datetime:
@@ -26,9 +16,7 @@ def utc_now() -> datetime:
 
 
 class Base(DeclarativeBase):
-    """Base class for all ORM models."""
-
-    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    """The base class SQLAlchemy requires for typed ORM models."""
 
 
 class Run(Base):
@@ -67,8 +55,8 @@ class Contractor(Base):
     specialties: Mapped[list[str]] = mapped_column(JSON, default=list)
     enrolled_in_gaf_leads: Mapped[bool] = mapped_column(Boolean, default=False)
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
-    last_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    last_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class RawResponse(Base):
@@ -77,9 +65,9 @@ class RawResponse(Base):
     __tablename__ = "raw_responses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     # Empty for responses that cover many contractors, like a search results page.
-    contractor_id: Mapped[str | None] = mapped_column(ForeignKey("contractors.gaf_id"), index=True)
+    contractor_id: Mapped[str | None] = mapped_column(ForeignKey("contractors.gaf_id"))
     source: Mapped[str] = mapped_column(String)
     url: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
