@@ -1,0 +1,110 @@
+{
+  "totalCount": 423,
+  "totalCountFiltered": 423,
+  "results": [
+    {
+      "title": "Golovin Roofing LLC",
+      "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/ny/flushing/golovin-roofing-llc-7158181",
+      "clickUri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/ny/flushing/golovin-roofing-llc-7158181",
+      "raw": {
+        "gaf_f_state_code": "NY",
+        "sysurihash": "xqeXPIvLpñY3vPpX",
+        "urihash": "xqeXPIvLpñY3vPpX",
+        "sysuri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/ny/flushing/golovin-roofing-llc-7158181",
+        "gaf_latitude": 40.762181,
+        "distanceinmiles": 11.399769283439493,
+        "gaf_rating": 0.0,
+        "gaf_postal_code": "11358",
+        "permanentid": "3429124ee24bf6def2c785e414306269fafdcc0e529d3d1eead5d85354ee",
+        "gaf_longitude": -73.798373,
+        "gaf_contractor_type": "Residential",
+        "gaf_navigation_title": "Golovin Roofing LLC",
+        "gaf_f_contractor_certifications_and_awards_residential": [
+          "GAF Certified™ - Certification"
+        ],
+        "gaf_contractor_dba": "Golovin Roofing LLC",
+        "gaf_phone": "(959) 237-0800",
+        "gaf_f_country_code": "USA",
+        "gaf_contractor_id": "7158181",
+        "gaf_f_contractor_designations_residential": [
+          "CERTIFIED^_^RESIDENTIAL^_^C"
+        ],
+        "gaf_number_of_reviews": 0,
+        "gaf_f_city": "Flushing",
+        "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/ny/flushing/golovin-roofing-llc-7158181"
+      }
+    },
+    {
+      "title": "Apex Roofing Solutions",
+      "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/woodland-park/apex-roofing-solutions-1150334",
+      "clickUri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/woodland-park/apex-roofing-solutions-1150334",
+      "raw": {
+        "gaf_f_state_code": "NJ",
+        "sysurihash": "DFuN90IAE6ðjñ0fu",
+        "urihash": "DFuN90IAE6ðjñ0fu",
+        "sysuri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/woodland-park/apex-roofing-solutions-1150334",
+        "gaf_latitude": 40.888625,
+        "distanceinmiles": 15.725977068306113,
+        "gaf_rating": 5.0,
+        "gaf_postal_code": "07424",
+        "permanentid": "0609b6cc3bceb9b4a1f9b9dccb1415a9f280b28a7721f80559a2cb53fd75",
+        "gaf_longitude": -74.213856,
+        "gaf_contractor_type": "Residential",
+        "gaf_navigation_title": "Apex Roofing Solutions",
+        "gaf_f_contractor_certifications_and_awards_residential": [
+          "GAF Master Elite® - Certification"
+        ],
+        "gaf_contractor_dba": "Apex Roofing Solutions",
+        "gaf_phone": "(973) 558-3045",
+        "gaf_f_country_code": "USA",
+        "gaf_enrolled_in_gaf_leads": 1,
+        "gaf_contractor_id": "1150334",
+        "gaf_f_contractor_designations_residential": [
+          "MASTER_ELITE^_^RESIDENTIAL^_^C",
+          "GAF Leads^_^RESIDENTIAL^_^P"
+        ],
+        "gaf_number_of_reviews": 118,
+        "gaf_f_city": "Woodland Park",
+        "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/woodland-park/apex-roofing-solutions-1150334"
+      }
+    },
+    {
+      "title": "Saddle River Roofing",
+      "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/saddle-river/saddle-river-roofing-1138492",
+      "clickUri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/saddle-river/saddle-river-roofing-1138492",
+      "raw": {
+        "gaf_f_state_code": "NJ",
+        "sysurihash": "ñBx6y6ññbXEE9gzG",
+        "urihash": "ñBx6y6ññbXEE9gzG",
+        "sysuri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/saddle-river/saddle-river-roofing-1138492",
+        "gaf_latitude": 41.033363,
+        "distanceinmiles": 22.045419323435,
+        "gaf_rating": 5.0,
+        "gaf_postal_code": "07458",
+        "permanentid": "32f62ee3b3d6c28714c496141ce3c0d2d7c5e4ca14a31171bf4d5c6daf70",
+        "gaf_longitude": -74.099793,
+        "gaf_contractor_type": "Residential",
+        "gaf_f_contractor_specialties_residential": [
+          "Metal"
+        ],
+        "gaf_navigation_title": "Saddle River Roofing",
+        "gaf_f_contractor_certifications_and_awards_residential": [
+          "GAF Certified Plus™ - Certification"
+        ],
+        "gaf_phone": "(201) 497-4856",
+        "gaf_f_country_code": "USA",
+        "gaf_contractor_id": "1138492",
+        "gaf_f_contractor_raq_specialties_residential": [
+          "METAL"
+        ],
+        "gaf_f_contractor_designations_residential": [
+          "CERTIFIED_PLUS^_^RESIDENTIAL^_^C",
+          "METAL^_^RESIDENTIAL^_^T"
+        ],
+        "gaf_number_of_reviews": 97,
+        "gaf_f_city": "Saddle River",
+        "uri": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/saddle-river/saddle-river-roofing-1138492"
+      }
+    }
+  ]
+}

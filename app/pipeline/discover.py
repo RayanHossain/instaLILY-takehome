@@ -33,14 +33,14 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
     session.commit()
 
     seen_ids: set[str] = set()
-    pages = coveo.fetch_pages(
-        settings.coveo_org_id,
-        settings.coveo_api_key.get_secret_value(),
-        territory["lat"],
-        territory["lng"],
-        territory["radius_miles"],
-    )
     try:
+        pages = coveo.fetch_pages(
+            settings.coveo_org_id,
+            settings.coveo_api_key.get_secret_value(),
+            territory["lat"],
+            territory["lng"],
+            territory["radius_miles"],
+        )
         for page_number, response in enumerate(pages, start=1):
             # Save the raw body first, so it's kept even if parsing fails.
             session.add(
