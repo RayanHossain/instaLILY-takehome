@@ -24,7 +24,11 @@ SETTINGS = Settings(_env_file=None, database_url="unused", coveo_org_id="test-or
 
 def test_second_run_adds_no_duplicates_and_moves_last_seen_run(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     def saved_page(*args: object) -> Iterator[httpx.Response]:
-        request = httpx.Request("POST", "https://test-org.org.coveo.com/rest/search/v2?organizationId=test-org")
+        request = httpx.Request(
+            "POST",
+            "https://test-org.org.coveo.com/rest/search/v2?organizationId=test-org",
+            json=coveo.build_search_body(TERRITORY["lat"], TERRITORY["lng"], TERRITORY["radius_miles"]),
+        )
         yield httpx.Response(200, content=FIXTURE.read_bytes(), headers={"content-type": "application/json"}, request=request)
 
     monkeypatch.setattr(coveo, "fetch_pages", saved_page)
@@ -43,6 +47,7 @@ def test_second_run_adds_no_duplicates_and_moves_last_seen_run(session: Session,
     raw_responses = session.scalars(select(RawResponse)).all()
     assert [r.run_id for r in raw_responses] == [first.id, second.id]
     assert raw_responses[0].body == FIXTURE.read_bytes().decode()
+    assert raw_responses[0].request_body["firstResult"] == 0  # the page offset is saved with the page
 
 
 def test_rejected_key_marks_the_run_failed(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:

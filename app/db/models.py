@@ -5,6 +5,7 @@ SQLite locally and on Postgres in production.
 """
 
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -73,6 +74,9 @@ class RawResponse(Base):
     url: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     content_type: Mapped[str | None] = mapped_column(String)
+    # The JSON body we sent, for POST requests like a search page (its offset is in here).
+    # Must never hold secrets; credentials go in headers, which are not saved.
+    request_body: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     body: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 hex digest of body
 

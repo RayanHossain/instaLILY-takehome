@@ -6,6 +6,7 @@ again is updated in place and keeps the run it was first seen in.
 """
 
 import hashlib
+import json
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -49,6 +50,7 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
                     source="coveo",
                     url=str(response.url),
                     content_type=response.headers.get("content-type"),
+                    request_body=json.loads(response.request.content),  # holds firstResult, the page offset
                     body=response.text,
                     content_hash=hashlib.sha256(response.content).hexdigest(),
                 )
