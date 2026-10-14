@@ -1,0 +1,9 @@
+# Distributor configuration.
+# The territory is the branch the pipeline searches around.
+# Selling points for AI outreach will be added in a later slice.
+
+territory:
+  zip: "10013"          # quoted so leading zeros survive
+  lat: 40.7217861
+  lng: -74.0094471
+  radius_miles: 25

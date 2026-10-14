@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local secrets and data
+.env
+data/
+
+# Take-home brief materials (kept out of the public repo)
+*.pdf
+email instructions.md
+
+# OS
+.DS_Store
