@@ -63,12 +63,22 @@ def build_search_body(lat: float, lng: float, radius_miles: float, first_result:
     }
 
 
-def fetch_pages(org_id: str, api_key: str, lat: float, lng: float, radius_miles: float) -> Iterator[httpx.Response]:
+def fetch_pages(
+    org_id: str,
+    api_key: str,
+    lat: float,
+    lng: float,
+    radius_miles: float,
+    *,
+    transport: httpx.BaseTransport | None = None,
+) -> Iterator[httpx.Response]:
     """Yield each page of search results as the raw HTTP response, until every result is fetched.
 
     The caller should save each response before parsing it: the next page is only
     requested (and this response's totalCount only read) after the caller is done.
     Exits with a message if Coveo rejects the API key.
+
+    Tests pass an httpx.MockTransport as transport; None uses the real network.
     """
     url = f"https://{org_id}.org.coveo.com/rest/search/v2?organizationId={org_id}"
     headers = {
@@ -78,7 +88,7 @@ def fetch_pages(org_id: str, api_key: str, lat: float, lng: float, radius_miles:
     }
 
     first_result = 0
-    with httpx.Client(headers=headers, timeout=30) as client:
+    with httpx.Client(headers=headers, timeout=30, transport=transport) as client:
         while True:
             response = client.post(url, json=build_search_body(lat, lng, radius_miles, first_result))
             if response.status_code in (401, 403):

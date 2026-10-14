@@ -1,10 +1,14 @@
-"""The Coveo request builder and result parser, checked against a saved real response."""
+"""The Coveo adapter: request builder, paging (against a mock transport), and result parser."""
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
-from app.sources.coveo import build_search_body, parse_result
+import httpx
+import pytest
+
+from app.sources.coveo import build_search_body, fetch_pages, parse_result
 
 FIXTURE = Path(__file__).parent / "fixtures" / "coveo_page.json"
 
@@ -54,6 +58,38 @@ def test_build_search_body_matches_the_locator_request() -> None:
     ]
     # The browser's analytics, history, timezone, and facets are left out on purpose.
     assert not {"analytics", "actionsHistory", "timezone", "facets"} & body.keys()
+
+
+def test_fetch_pages_stops_at_total_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    offsets = []
+
+    def two_pages(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer test-key"
+        offsets.append(json.loads(request.content)["firstResult"])
+        return httpx.Response(200, json={"totalCount": 150, "results": []})
+
+    pauses: list[float] = []
+    monkeypatch.setattr(time, "sleep", pauses.append)  # record the politeness pause instead of waiting
+
+    pages = list(fetch_pages("test-org", "test-key", 40.72, -74.01, 25, transport=httpx.MockTransport(two_pages)))
+
+    assert len(pages) == 2
+    assert offsets == [0, 100]  # 150 results fit in two pages of 100, so no third request
+    assert pauses == [1]  # one pause, between the pages
+
+
+def test_fetch_pages_exits_when_the_key_is_rejected() -> None:
+    requests = []
+
+    def rejected(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(401)
+
+    with pytest.raises(SystemExit, match="HTTP 401") as exit_info:
+        list(fetch_pages("test-org", "test-key", 40.72, -74.01, 25, transport=httpx.MockTransport(rejected)))
+
+    assert len(requests) == 1
+    assert "test-key" not in str(exit_info.value)  # the message never repeats the key
 
 
 def test_parse_unrated_contractor() -> None:
