@@ -8,6 +8,9 @@ __pycache__/
 .env
 data/
 
+# Personal Claude Code instructions
+CLAUDE.local.md
+
 # Take-home brief materials (kept out of the public repo)
 *.pdf
 email instructions.md
