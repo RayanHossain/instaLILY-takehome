@@ -120,7 +120,8 @@ def parse_result(result: dict[str, Any]) -> dict[str, Any]:
         "certifications": raw.get("gaf_f_contractor_certifications_and_awards_residential", []),
         "designations": raw.get("gaf_f_contractor_designations_residential", []),
         "specialties": raw.get("gaf_f_contractor_specialties_residential", []),
-        # GAF sends 1 for enrolled contractors and leaves the field out otherwise,
-        # so a missing value means unknown (None), not False.
+        # GAF sends 1 for enrolled contractors, never sends 0, and omits the field for
+        # everyone else. Omitted could mean "not enrolled" or "not reported", so we
+        # store None (unknown) rather than guess False.
         "enrolled_in_gaf_leads": None if enrolled is None else bool(enrolled),
     }

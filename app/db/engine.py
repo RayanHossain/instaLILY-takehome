@@ -11,12 +11,10 @@ from typing import Any
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import make_url
 
-from app.settings import Settings
 
-
-def make_engine(database_url: str | None = None) -> Engine:
-    """Create an engine for the given URL, or for DATABASE_URL from settings."""
-    url = make_url(database_url or Settings().database_url)
+def make_engine(database_url: str) -> Engine:
+    """Create an engine for a database URL such as sqlite:///data/leads.db."""
+    url = make_url(database_url)
     engine = create_engine(url)
 
     if url.get_backend_name() == "sqlite":

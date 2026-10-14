@@ -11,7 +11,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "coveo_page.json"
 
 def fixture_results() -> dict[str, dict[str, Any]]:
     """The saved search results, keyed by GAF contractor ID."""
-    results = json.loads(FIXTURE.read_text())["results"]
+    results = json.loads(FIXTURE.read_bytes())["results"]  # bytes, so the platform encoding doesn't matter
     return {result["raw"]["gaf_contractor_id"]: result for result in results}
 
 
@@ -29,7 +29,29 @@ def test_build_search_body_matches_the_locator_request() -> None:
     assert body["pipeline"] == body["searchHub"] == "prod-gaf-recommended-residential-contractors"
     assert (body["sortCriteria"], body["locale"]) == ("relevancy", "en-US")
     assert (body["numberOfResults"], body["firstResult"]) == (100, 200)
-    assert "gaf_contractor_id" in body["fieldsToInclude"]
+    assert body["fieldsToInclude"] == [
+        "gaf_contractor_id",
+        "gaf_contractor_type",
+        "gaf_contractor_dba",
+        "gaf_navigation_title",
+        "gaf_phone",
+        "gaf_f_city",
+        "gaf_f_state_code",
+        "gaf_postal_code",
+        "gaf_f_country_code",
+        "gaf_latitude",
+        "gaf_longitude",
+        "gaf_rating",
+        "gaf_number_of_reviews",
+        "gaf_f_contractor_certifications_and_awards_residential",
+        "gaf_f_contractor_designations_residential",
+        "gaf_f_contractor_specialties_residential",
+        "gaf_f_contractor_raq_specialties_residential",
+        "gaf_f_contractor_technologies_residential",
+        "gaf_enrolled_in_gaf_leads",
+        "distanceinmiles",
+        "uri",
+    ]
     # The browser's analytics, history, timezone, and facets are left out on purpose.
     assert not {"analytics", "actionsHistory", "timezone", "facets"} & body.keys()
 

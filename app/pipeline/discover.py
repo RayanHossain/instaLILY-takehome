@@ -60,9 +60,9 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
                 row = coveo.parse_result(result)
                 row.update(first_seen_run=run.id, last_seen_run=run.id, updated_at=utc_now())
                 rows.append(row)
-                seen_ids.add(row["gaf_id"])
             upsert(session, Contractor, rows, key_column="gaf_id", keep_on_conflict=["first_seen_run"])
             session.commit()
+            seen_ids.update(row["gaf_id"] for row in rows)  # count only what was stored
             print(f"discover: page {page_number} saved, {len(rows)} contractors upserted")
 
         run.status = "finished"
