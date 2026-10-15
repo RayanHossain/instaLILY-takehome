@@ -155,3 +155,18 @@ def test_total_is_the_presets_weighted_sum() -> None:
     assert total(score, CONFIG.presets["Balanced"]) == 71.5  # (80*35 + 60*30 + 50*15 + 90*20) / 100
     assert total(score, CONFIG.presets["Big accounts"]) == 74.0
     assert total(score, CONFIG.presets["Quick wins"]) == 71.0
+
+
+def test_a_signal_is_a_guess_only_when_its_data_was_missing() -> None:
+    def guesses(signals: list[dict[str, Any]]) -> list[bool]:
+        return [signal["guess"] for signal in signals]
+
+    assert guesses(value_signals(CONFIG, None, None, [])) == [True, True, True]
+    assert guesses(value_signals(CONFIG, 312, "Master Elite", ["Siding"])) == [False, False, False]
+    # Master Elite scores the same 50 points as no tier, but it's known, so not a guess.
+    assert guesses(winnability_signals(CONFIG, 17, 2009, "the GAF profile", "Master Elite")) == [False, False]
+    assert guesses(winnability_signals(CONFIG, None, None, None, None)) == [True, True]
+    assert guesses(stability_signals(CONFIG, 4.8, 3)) == [True]  # too few reviews to count the rating
+    assert guesses(stability_signals(CONFIG, 4.8, 30)) == [False]
+    assert guesses(distance_signals(CONFIG, 12.5, 25)) == [False]  # halfway: 50 points, but measured
+    assert guesses(distance_signals(CONFIG, None, 25)) == [True]

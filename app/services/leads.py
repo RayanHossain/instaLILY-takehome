@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app import scoring
 from app.briefs import Brief
-from app.db.models import Contractor, ContractorBrief, Score
+from app.db.models import Contractor, ContractorBrief, Fact, Score
 from app.settings import load_territory
 
 # GAF's contractor tiers, highest first.
@@ -64,7 +64,18 @@ class Signal(BaseModel):
     input: str  # in plain words, e.g. "312 reviews" or "founding year unknown"
     points: float
     weight: float
-    guess: bool  # the data was missing, so it scored the neutral missing_points
+    guess: bool = False  # its data was missing, so it scored the neutral middle
+
+
+class LeadFact(BaseModel):
+    """One fact the AI extracted about a contractor, with the exact quote it rests on."""
+
+    id: int
+    field: str  # e.g. "services" or "owner_names"
+    value: str
+    quote: str  # an exact quote from the source text
+    source: str  # "about_text" (the GAF profile) or "homepage"
+    source_url: str | None
 
 
 class LeadDetail(BaseModel):
@@ -86,7 +97,8 @@ class LeadDetail(BaseModel):
     about_text: str | None
     score: LeadScore | None
     reasons: dict[str, list[Signal]] | None  # each component's signals; None until scored
-    brief: Brief | None  # its latest brief, written while it was in a preset's top N
+    brief: Brief | None  # its latest brief, only while it's in a preset's top N under the current scores
+    facts: list[LeadFact]  # every fact extracted about it; a brief cites some of them by id
 
 
 def tier(certifications: list[str]) -> str | None:
@@ -236,8 +248,11 @@ def _tags(lead: LeadRow, top: dict[str, list[str]], briefed: set[str]) -> list[s
     return sorted(found, key=TAGS.index)
 
 
-def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDetail:
-    """Return the details of one contractor: its scores under the preset, their reasons, and its brief.
+def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: int = 10) -> LeadDetail:
+    """Return the details of one contractor: its scores under the preset, their reasons, its brief, and its facts.
+
+    A brief is written for each preset's top_n leads. One written under older rules stays
+    stored, but is returned only while its lead is in a top_n under the current scores.
 
     Raises:
         LookupError: No contractor has this GAF ID.
@@ -249,8 +264,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
     preset_name, weights = _preset(preset)
     score = session.get(Score, gaf_id)
     stored_brief = session.get(ContractorBrief, gaf_id)
-    distance = distance_miles(contractor.lat, contractor.lng, load_territory())
-    missing_points = scoring.load_scoring_config().missing_points
+    in_a_top = any(gaf_id in ids for ids in top_leads(session, top_n).values())
+    facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id))
 
     return LeadDetail(
         gaf_id=contractor.gaf_id,
@@ -259,7 +274,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         phone=contractor.phone,
         website_url=contractor.website_url,
         profile_url=contractor.profile_url,
-        distance_miles=distance,
+        distance_miles=distance_miles(contractor.lat, contractor.lng, load_territory()),
         tier=tier(contractor.certifications),
         certifications=contractor.certifications,
         rating=contractor.rating,
@@ -268,24 +283,13 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         enrolled_in_gaf_leads=contractor.enrolled_in_gaf_leads,
         about_text=contractor.about_text,
         score=_lead_score(score, preset_name, weights),
-        reasons=_signals(score.reasons, missing_points, distance) if score else None,
-        brief=Brief.model_validate(stored_brief.content) if stored_brief else None,
+        reasons={component: [Signal(**signal) for signal in signals] for component, signals in score.reasons.items()} if score else None,
+        brief=Brief.model_validate(stored_brief.content) if stored_brief and in_a_top else None,
+        facts=[
+            LeadFact(id=fact.id, field=fact.field, value=fact.value, quote=fact.evidence, source=fact.source, source_url=fact.source_url)
+            for fact in facts
+        ],
     )
-
-
-def _signals(reasons: dict[str, list[dict[str, Any]]], missing_points: int, distance: float | None) -> dict[str, list[Signal]]:
-    """A score's reasons as Signals, each marked as a guess when its data was missing.
-
-    A signal with no data scores missing_points. Distance is measured instead, so it's a
-    guess only without coordinates: one lead sits exactly halfway across the territory.
-    """
-    return {
-        component: [
-            Signal(**signal, guess=distance is None if component == "distance" else signal["points"] == missing_points)
-            for signal in signals
-        ]
-        for component, signals in reasons.items()
-    }
 
 
 def _preset(name: str | None) -> tuple[str, scoring.Preset]:

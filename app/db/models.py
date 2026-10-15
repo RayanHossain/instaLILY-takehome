@@ -200,7 +200,8 @@ class Score(Base):
     distance: Mapped[float] = mapped_column(Float)
     # e.g. [{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}]
     flags: Mapped[list[dict[str, str]]] = mapped_column(JSON)
-    # Per component, its signals: {"value": [{"signal": "reviews", "input": "312 reviews", "points": 90, "weight": 50}, ...], ...}
+    # Per component, its signals: {"value": [{"signal": "reviews", "input": "312 reviews", "points": 90, "weight": 50, "guess": false}, ...], ...}
+    # guess: the signal's data was missing, so it scored the neutral middle.
     reasons: Mapped[dict[str, list[dict[str, Any]]]] = mapped_column(JSON)
     rules_version: Mapped[str] = mapped_column(String)  # config/scoring.yaml's rules_version
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

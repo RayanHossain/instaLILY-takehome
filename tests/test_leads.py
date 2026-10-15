@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
-from app.db.models import Contractor, ContractorBrief, Run, Score
+from app.db.models import Contractor, ContractorBrief, Fact, Run, Score
 from app.services.leads import LeadRow, get_lead, list_leads, tier, top_leads
 from app.settings import load_territory
 from app.sources import coveo
@@ -213,22 +213,19 @@ def test_tags_name_only_the_exceptions(session: Session) -> None:
     assert tags["other"] == ["Top pick", "Brief", "New business"]
 
 
-def test_a_signal_is_a_guess_only_when_its_data_was_missing(session: Session) -> None:
+def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> None:
     run = make_run(session)
-    add_contractor(session, run, "1")
-    add_score(
-        session,
-        "1",
-        60,
-        value=[
-            {"signal": "reviews", "input": "no reviews", "points": 50, "weight": 50},
-            {"signal": "tier", "input": "Certified", "points": 40, "weight": 30},
-        ],
-        # Measured, so not a guess, even though halfway across the territory scores 50.
-        distance=[{"signal": "distance", "input": "12.5 miles from the branch", "points": 50, "weight": 100}],
-    )
+    add_contractor(session, run, "star")
+    add_contractor(session, run, "fallen")  # briefed under older rules, now out of every top 1
+    add_score(session, "star", 90)
+    add_score(session, "fallen", 50)
+    add_brief(session, "star")
+    add_brief(session, "fallen")
+    session.add(Fact(contractor_id="fallen", field="services", value="Roof replacement", evidence="We replace roofs.", source="homepage", source_url="https://fallen.example", model="test", prompt_version="test"))
+    session.flush()
 
-    reasons = get_lead(session, "1").reasons
-
-    assert [signal.guess for signal in reasons["value"]] == [True, False]
-    assert [signal.guess for signal in reasons["distance"]] == [False]
+    assert get_lead(session, "star", top_n=1).brief is not None
+    fallen = get_lead(session, "fallen", top_n=1)
+    assert fallen.brief is None
+    assert [(fact.value, fact.quote) for fact in fallen.facts] == [("Roof replacement", "We replace roofs.")]
+    assert get_lead(session, "fallen", top_n=2).brief is not None  # back in a top 2

@@ -53,6 +53,44 @@ def show_why(lead: data.LeadDetail, weights: data.Preset) -> None:
     st.caption(":gray[Grey: no data, so a neutral 50.]")
 
 
+def show_fact(fact: data.LeadFact) -> None:
+    """One fact: its value, then the quote it rests on and a link to where the quote is."""
+    where = "GAF profile" if fact.source == "about_text" else "Website"
+    link = f" · [{where}]({fact.source_url})" if fact.source_url else f" · {where}"
+    st.markdown(f"**{plain(fact.value)}** :gray[({fact.field.replace('_', ' ')})]{link}")
+    st.caption(f"“{plain(fact.quote)}”")
+
+
+def show_brief(lead: data.LeadDetail) -> None:
+    """The Brief tab: the touch plan in the order the rep uses it, then the quoted facts behind it."""
+    brief = lead.brief
+    if brief is None:
+        st.caption(f"Briefs are written for each preset's top {data.top_leads_per_preset()} leads, and this one isn't in any.")
+        if lead.facts:
+            st.markdown("**What its GAF profile and website say**")
+            for fact in lead.facts:
+                show_fact(fact)
+        return
+
+    st.markdown(plain(brief.why_this_contractor))
+    if brief.ask_for:
+        st.markdown(f"Ask for: **{plain(brief.ask_for)}**")
+    st.markdown(f"> {plain(brief.first_touch.opener)}")
+    st.caption(plain(brief.first_touch.reason))
+    st.markdown("**Follow-ups**")
+    for follow_up in brief.follow_ups:
+        st.markdown(f"- {plain(follow_up.step)}  \n  :gray[{plain(follow_up.reason)}]")
+    st.markdown("**Questions**")
+    st.markdown("\n".join(f"- {plain(question)}" for question in brief.questions))
+    evidence = [fact for fact in lead.facts if fact.id in brief.cited_fact_ids]
+    if evidence:
+        with st.expander(f"Evidence: {len(evidence)} quoted facts"):
+            for fact in evidence:
+                show_fact(fact)
+    else:
+        st.caption("Written from the GAF profile only.")
+
+
 def main() -> None:
     """Draw the page: sidebar filters, the preset, the lead table, and the selected lead's details."""
     st.set_page_config(page_title="Roofing leads", layout="wide")
@@ -128,10 +166,10 @@ def main() -> None:
         st.subheader(lead.name, anchor=False)
         st.caption(" · ".join(part for part in (lead.tier, lead.phone) if part) or DASH)
 
-        why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief", "Notes"], height=355)
+        why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"], height=355)
         with why_tab:
             show_why(lead, scoring.presets[preset])
         with brief_tab:
-            st.caption("The AI-written brief goes here.")
+            show_brief(lead)
         with notes_tab:
             st.caption("The rep's notes and status go here.")

@@ -188,7 +188,8 @@ def score_contractor(
 def value_signals(
     config: ScoringConfig, review_count: int | None, tier: str | None, other_trades: list[str]
 ) -> list[dict[str, Any]]:
-    """Value's signals, each with its input in plain words, its points, and its weight."""
+    """Value's signals, each with its input in plain words, its points, its weight, and whether
+    it's a guess: its data was missing, so it scored the neutral middle."""
     rules = config.value
     reviews = review_count or 0
     return [
@@ -197,18 +198,21 @@ def value_signals(
             "input": _count(reviews, "review") if reviews else "no reviews",
             "points": _bucket_points(reviews, rules.reviews.buckets),
             "weight": rules.reviews.weight,
+            "guess": not reviews,
         },
         {
             "signal": "tier",
             "input": tier or "no tier",
             "points": rules.tier.points.get(tier, config.missing_points),
             "weight": rules.tier.weight,
+            "guess": tier is None,
         },
         {
             "signal": "other trades",
             "input": ", ".join(other_trades) if other_trades else "no other trades found",
             "points": rules.other_trades.any if other_trades else rules.other_trades.none,
             "weight": rules.other_trades.weight,
+            "guess": not other_trades,  # none found isn't proof of none
         },
     ]
 
@@ -224,6 +228,7 @@ def winnability_signals(
             "input": "founding year unknown" if years is None else f"{_count(years, 'year')} in business (founded {founded_year}, per {founded_from})",
             "points": config.missing_points if years is None else _bucket_points(years, rules.years_in_business.buckets),
             "weight": rules.years_in_business.weight,
+            "guess": years is None,
             "founded_from": founded_from,
         },
         {
@@ -231,6 +236,7 @@ def winnability_signals(
             "input": tier or "no tier",
             "points": rules.tier.points.get(tier, config.missing_points),
             "weight": rules.tier.weight,
+            "guess": tier is None,
         },
     ]
 
@@ -240,17 +246,19 @@ def stability_signals(config: ScoringConfig, rating: float | None, review_count:
     rules = config.stability
     reviews = review_count or 0
     if rating is not None and reviews >= rules.min_reviews:
-        return [{"signal": "rating", "input": f"rated {rating:.1f} from {reviews} reviews", "points": _bucket_points(rating, rules.rating), "weight": 100}]
+        return [
+            {"signal": "rating", "input": f"rated {rating:.1f} from {reviews} reviews", "points": _bucket_points(rating, rules.rating), "weight": 100, "guess": False}
+        ]
     text = "no reviews" if not reviews else f"only {_count(reviews, 'review')}, too few to count the rating"
-    return [{"signal": "rating", "input": text, "points": config.missing_points, "weight": 100}]
+    return [{"signal": "rating", "input": text, "points": config.missing_points, "weight": 100, "guess": True}]
 
 
 def distance_signals(config: ScoringConfig, distance_miles: float | None, radius_miles: float) -> list[dict[str, Any]]:
     """Distance's one signal: 100 at the branch, falling linearly to 0 at the territory radius."""
     if distance_miles is None:
-        return [{"signal": "distance", "input": "location unknown", "points": config.missing_points, "weight": 100}]
+        return [{"signal": "distance", "input": "location unknown", "points": config.missing_points, "weight": 100, "guess": True}]
     points = round(max(0.0, 100 * (1 - distance_miles / radius_miles)), 1)
-    return [{"signal": "distance", "input": f"{distance_miles:.1f} miles from the branch", "points": points, "weight": 100}]
+    return [{"signal": "distance", "input": f"{distance_miles:.1f} miles from the branch", "points": points, "weight": 100, "guess": False}]
 
 
 def flags(

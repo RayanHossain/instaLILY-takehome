@@ -7,7 +7,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
-from app.db.models import Contractor, Run, Score
+from app.db.models import Contractor, ContractorBrief, Fact, Run, Score
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
@@ -19,6 +19,7 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
     """The page, not yet run, on a database with three scored contractors.
 
     Balanced ranks them Alpha, Beta, Gamma; Quick wins ranks them Beta, Gamma, Alpha.
+    Alpha has a brief; Gamma has none, but has one fact.
     """
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
@@ -40,6 +41,27 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
                 rules_version="test",
             )
         )
+    brief = {
+        "why_this_contractor": "Alpha replaces roofs across Brooklyn.",
+        "first_touch": {"opener": "Saw your slate work on Atlantic Ave.", "reason": "It names a job they're proud of."},
+        "follow_ups": [{"step": "Send the rooftop delivery sheet.", "reason": "They work on tight streets."}],
+        "questions": ["What's next on your board?", "Who supplies you now?"],
+        "selling_points": [],
+        "cited_fact_ids": [],
+    }
+    session.add(ContractorBrief(contractor_id="1", content=brief, input_hash="0" * 64, model="test", prompt_version="test"))
+    session.add(
+        Fact(
+            contractor_id="3",
+            field="services",
+            value="Slate roof repair",
+            evidence="We repair slate roofs.",
+            source="homepage",
+            source_url="https://gamma.example",
+            model="test",
+            prompt_version="test",
+        )
+    )
     session.commit()
     # Environment variables win over .env, so the app opens the test database, never data/leads.db.
     monkeypatch.setenv("DATABASE_URL", str(engine.url))
@@ -103,3 +125,18 @@ def test_a_link_with_a_preset_opens_the_page_ranked_by_it(app: AppTest) -> None:
 
     assert app.segmented_control(key="preset").value == "Quick wins"
     assert shown_lead(app) == "Beta Roofing"  # the top lead under Quick wins
+
+
+def test_a_lead_without_a_brief_shows_brief_none_and_its_facts(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+
+    assert app.tabs[1].label == "Brief (none)"
+    assert any("Slate roof repair" in markdown.value for markdown in app.tabs[1].markdown)
+
+
+def test_a_lead_with_a_brief_shows_its_opener(app: AppTest) -> None:
+    app.run()  # Alpha, the top lead, is selected
+
+    assert app.tabs[1].label == "Brief"
+    assert any("Atlantic Ave" in markdown.value for markdown in app.tabs[1].markdown)

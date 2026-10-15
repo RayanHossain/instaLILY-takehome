@@ -11,12 +11,23 @@ from sqlalchemy.orm import Session
 from app.db.engine import make_engine
 from app.scoring import Preset, load_scoring_config
 from app.services import leads
-from app.services.leads import TAGS, TIERS, LeadDetail, LeadRow
+from app.services.leads import TAGS, TIERS, LeadDetail, LeadFact, LeadRow
 from app.settings import Settings, load_territory
 
-# What main.py may use. The constants, the two models (for type hints), load_scoring_config,
+# What main.py may use. The constants, the models (for type hints), load_scoring_config,
 # and load_territory are passed through unchanged.
-__all__ = ["TAGS", "TIERS", "LeadDetail", "Preset", "get_lead", "list_leads", "load_scoring_config", "load_territory"]
+__all__ = [
+    "TAGS",
+    "TIERS",
+    "LeadDetail",
+    "LeadFact",
+    "Preset",
+    "get_lead",
+    "list_leads",
+    "load_scoring_config",
+    "load_territory",
+    "top_leads_per_preset",
+]
 
 
 @st.cache_resource
@@ -47,4 +58,9 @@ def list_leads(search: str, tiers: list[str], max_miles: float, preset: str) -> 
 def get_lead(gaf_id: str, preset: str) -> LeadDetail:
     """The detail panel's data for one contractor, scored under the preset."""
     with _open_session() as session:
-        return leads.get_lead(session, gaf_id, preset=preset)
+        return leads.get_lead(session, gaf_id, preset=preset, top_n=Settings().top_leads_per_preset)
+
+
+def top_leads_per_preset() -> int:
+    """How many leads each preset's top takes: the ones the brief stage writes briefs for."""
+    return Settings().top_leads_per_preset
