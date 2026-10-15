@@ -70,8 +70,9 @@ class ContractorFacts(BaseModel):
 def extract(session: Session, settings: Settings) -> int:
     """Rebuild the facts of every contractor in the latest discover from its About text and homepage.
 
-    A contractor with neither gets no AI call and keeps no facts. One whose answer is
-    still invalid after the AI client's retry is counted and keeps no facts. The run is
+    A contractor with neither gets no AI call and keeps no facts. One the AI client skips
+    (its answer still invalid after the retry, or the API kept failing with errors that
+    aren't rate limits) is counted, keeps no facts, and is tried again next run. The run is
     a stage_runs row; when it ends, finished or not, it gets its totals: the AI client's
     counts from ai_calls, then contractors by input, facts kept, and grounding drops.
 
@@ -109,7 +110,7 @@ def extract(session: Session, settings: Settings) -> int:
     session.commit()
 
     inputs: Counter[str] = Counter()  # contractors by the sources their input had
-    stored = dropped = failed = 0
+    stored = dropped = skipped = 0
     try:
         for number, (gaf_id, about_text, profile_url) in enumerate(contractors, start=1):
             texts: dict[str, str] = {}  # source -> its text, as the model sees it
@@ -127,8 +128,8 @@ def extract(session: Session, settings: Settings) -> int:
                 input_text = "\n\n".join(f"{HEADINGS[source]}\n{text}" for source, text in texts.items())
                 facts = ai.generate(session, settings, PROMPT, input_text, ContractorFacts, run=run, contractor_id=gaf_id)
                 if facts is None:
-                    failed += 1
-                    outcome = "answer still invalid after the retry, so no facts"
+                    skipped += 1
+                    outcome = "no valid answer, so skipped with no facts (its attempts are in ai_calls)"
                 else:
                     rows, drops = ground(facts, texts)
                     dropped += drops
@@ -166,7 +167,7 @@ def extract(session: Session, settings: Settings) -> int:
             **{kind: inputs[kind] for kind in INPUT_KINDS.values()},
             "facts kept": stored,
             "grounding drops": dropped,
-            "answers still invalid": failed,
+            "contractors skipped": skipped,
         }
         session.commit()
         print(f"extract: {run.status}: " + ", ".join(f"{name} {value}" for name, value in run.totals.items()))

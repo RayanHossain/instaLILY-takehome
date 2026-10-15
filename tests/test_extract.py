@@ -1,5 +1,6 @@
 """The extract stage with a fake model returning fixture output, and the grounding check on its own."""
 
+import time
 from functools import partial
 from pathlib import Path
 
@@ -32,8 +33,22 @@ def normalize(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def add_contractors(session: Session) -> None:
-    """Add Matute Roofing, with About text and a saved homepage, and Golovin Roofing, with neither."""
+def answer_with_the_fixture(request: httpx.Request) -> httpx.Response:
+    """A fake Gemini API reply with the fixture's facts as the answer."""
+    return httpx.Response(
+        200,
+        json={
+            "candidates": [{"content": {"role": "model", "parts": [{"text": ANSWER_JSON}]}, "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 1500, "candidatesTokenCount": 400},
+        },
+    )
+
+
+def add_contractors(session: Session) -> Run:
+    """Add Matute Roofing, with About text and a saved homepage, and Golovin Roofing, with neither.
+
+    Returns their discover run.
+    """
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
     session.flush()
@@ -63,6 +78,7 @@ def add_contractors(session: Session) -> None:
         )
     )
     session.commit()
+    return run
 
 
 def test_extract_stores_grounded_facts_and_replaces_them(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,15 +141,8 @@ def test_extract_logs_its_calls_and_a_rerun_makes_none(session: Session, monkeyp
     requests: list[httpx.Request] = []
 
     def gemini(request: httpx.Request) -> httpx.Response:
-        """A fake Gemini API that answers with the fixture's facts."""
         requests.append(request)
-        return httpx.Response(
-            200,
-            json={
-                "candidates": [{"content": {"role": "model", "parts": [{"text": ANSWER_JSON}]}, "finishReason": "STOP"}],
-                "usageMetadata": {"promptTokenCount": 1500, "candidatesTokenCount": 400},
-            },
-        )
+        return answer_with_the_fixture(request)
 
     # The real AI client, talking to the fake API.
     monkeypatch.setattr(ai, "generate", partial(ai.generate, transport=httpx.MockTransport(gemini)))
@@ -154,6 +163,41 @@ def test_extract_logs_its_calls_and_a_rerun_makes_none(session: Session, monkeyp
         SETTINGS.gemini_model,
     )
     assert (call.outcome, call.input_tokens, call.output_tokens) == ("ok", 1500, 400)
+
+
+def test_a_contractor_whose_calls_keep_failing_is_skipped_and_the_stage_goes_on(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = add_contractors(session)
+    # Stages work through contractors by GAF ID, so this one comes before Matute Roofing.
+    session.add(
+        Contractor(
+            gaf_id="1000001",
+            name="Apex Roofing",
+            about_text="Apex Roofing installs metal roofs.",
+            first_seen_run=run.id,
+            last_seen_run=run.id,
+        )
+    )
+    session.commit()
+
+    def gemini(request: httpx.Request) -> httpx.Response:
+        """The API fails every request about Apex Roofing with an internal error, and answers the rest."""
+        if b"Apex Roofing" in request.content:
+            return httpx.Response(500, json={"error": {"code": 500, "message": "Internal error encountered.", "status": "INTERNAL"}})
+        return answer_with_the_fixture(request)
+
+    monkeypatch.setattr(ai, "generate", partial(ai.generate, transport=httpx.MockTransport(gemini)))
+    monkeypatch.setattr(ai, "_last_request_at", 0.0)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)  # skip the pauses between tries
+
+    assert extract(session, SETTINGS) == 12  # Matute Roofing's facts, after Apex Roofing was skipped
+
+    stage_run = session.scalars(select(StageRun)).one()
+    assert (stage_run.status, stage_run.totals["contractors skipped"], stage_run.totals["error"]) == ("finished", 1, 4)
+    apex_calls = session.scalars(select(AiCall).where(AiCall.contractor_id == "1000001")).all()
+    assert [call.outcome for call in apex_calls] == ["error"] * 4
+    assert session.scalar(select(func.count()).select_from(Fact).where(Fact.contractor_id == "1000001")) == 0
 
 
 def test_grounding_drops_an_invented_quote() -> None:

@@ -76,10 +76,11 @@ def generate(
         transport: Tests pass an httpx.MockTransport; None uses the real network.
 
     Returns:
-        The validated answer, or None if it was still invalid after the retry.
+        The validated answer, or None when this input is skipped: its answer was still invalid
+        after the retry, or the API kept failing with errors that aren't rate limits.
 
     Raises:
-        SystemExit: GEMINI_API_KEY isn't set, or the API kept failing with an error worth retrying.
+        SystemExit: GEMINI_API_KEY isn't set, or the API kept answering 429 (rate-limited).
     """
 
     def log(
@@ -133,7 +134,10 @@ def generate(
 
     with genai.Client(api_key=settings.gemini_api_key.get_secret_value(), http_options=http_options) as client:
         for attempt in range(2):  # the first answer, and one retry if it's invalid
-            response, seconds = _ask(client, settings, contents, config, log)
+            asked = _ask(client, settings, contents, config, log)
+            if asked is None:
+                return None  # the API kept failing; each attempt is in ai_calls
+            response, seconds = asked
             answer = response.text or ""
             saved = AiCache(cache_key=cache_key, model=settings.gemini_model, prompt_name=prompt_name, response=answer)
             session.add(saved)
@@ -154,6 +158,7 @@ def generate(
             saved.valid = True
             log("ok" if attempt == 0 else "ok after a retry", seconds=seconds, usage=response.usage_metadata)
             return result
+    print(f"ai: {prompt_name} answer still invalid after the retry; skipping this input")
     return None
 
 
@@ -183,13 +188,15 @@ def _ask(
     contents: list[types.Content],
     config: types.GenerateContentConfig,
     log: Callable[..., None],
-) -> tuple[types.GenerateContentResponse, float]:
-    """Send one request, paced, and return the response and the seconds it took.
+) -> tuple[types.GenerateContentResponse, float] | None:
+    """Send one request, paced, and return the response and the seconds it took, or None to skip this input.
 
-    A failed attempt is logged. An error in RETRY_CODES (a 429, a 503, ...) or no answer
+    Every failed attempt is logged. An error in RETRY_CODES (a 429, a 503, ...) or no answer
     within the timeout is tried again after a pause: the one the error suggests, if it
-    suggests one. After four tries in all, the stage stops cleanly, and a rerun picks up
-    from the cache. Any other API error is raised.
+    suggests one. After four tries in all, a 429 stops the stage cleanly, since every
+    other input would hit the same limit, and a rerun picks up from the cache. Any other
+    error gives up on this input only: None, after four tries, or at once for an error
+    that retrying can't fix (a 400, say).
     """
     global _last_request_at
     tries = 0
@@ -203,24 +210,28 @@ def _ask(
         try:
             response = client.models.generate_content(model=settings.gemini_model, contents=contents, config=config)
         except errors.APIError as error:
-            problem = f"HTTP {error.code}"
+            problem, rate_limited = f"HTTP {error.code}", error.code == 429
             log(ERROR_OUTCOMES.get(error.code, "error"), seconds=time.monotonic() - _last_request_at, error=f"{problem}: {error.message}")
             if error.code not in RETRY_CODES:
-                raise
+                print(f"ai: {problem} from {settings.gemini_model}, which retrying can't fix; skipping this input")
+                return None
             # A 429 can say how long to wait: {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "37s"}.
             details = error.details.get("error", {}).get("details", []) if isinstance(error.details, dict) else []
             suggested = [float(d["retryDelay"].removesuffix("s")) for d in details if d.get("@type", "").endswith("RetryInfo")]
         except httpx.TimeoutException:
-            problem, suggested = f"no answer within {TIMEOUT_SECONDS} s", []
+            problem, rate_limited, suggested = f"no answer within {TIMEOUT_SECONDS} s", False, []
             log("error", seconds=time.monotonic() - _last_request_at, error=problem)
         else:
             return response, time.monotonic() - _last_request_at
 
         if tries > len(RETRY_PAUSES):
-            raise SystemExit(
-                f"ai: {problem} from {settings.gemini_model} on {tries} tries in a row, so the stage stopped. "
-                "Answers so far are saved, and a rerun picks up from the cache."
-            )
+            if rate_limited:
+                raise SystemExit(
+                    f"ai: {problem} (rate-limited) from {settings.gemini_model} on {tries} tries in a row, so the stage "
+                    "stopped. Answers so far are saved, and a rerun picks up from the cache."
+                )
+            print(f"ai: {problem} from {settings.gemini_model} on {tries} tries in a row; skipping this input")
+            return None
         delay = suggested[0] if suggested else RETRY_PAUSES[tries - 1]
         print(f"ai: {problem} from {settings.gemini_model}; trying again in {delay:.0f} s")
         time.sleep(delay)

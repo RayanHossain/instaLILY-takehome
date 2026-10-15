@@ -161,28 +161,52 @@ def test_cache_hit_makes_no_call(session: Session, run: StageRun) -> None:
     assert len(requests) == 2
 
 
-@pytest.mark.parametrize(
-    ("reply", "outcome", "pauses"),
-    [
-        (RATE_LIMITED, "rate-limited", [7.0, 7.0, 7.0]),  # the 429 says to wait 7 s, so that is the pause
-        (UNAVAILABLE, "overloaded", [15, 30, 60]),  # a 503 suggests nothing, so the default pauses apply
-        (DEADLINE_EXCEEDED, "error", [15, 30, 60]),
-    ],
-)
-def test_retryable_error_stops_the_stage_cleanly_after_four_tries(
-    session: Session, clock: FakeClock, run: StageRun, reply: tuple[int, dict[str, Any]], outcome: str, pauses: list[float]
-) -> None:
+def test_rate_limit_stops_the_stage_cleanly_after_four_tries(session: Session, clock: FakeClock, run: StageRun) -> None:
     requests: list[httpx.Request] = []
 
     with pytest.raises(SystemExit, match="a rerun picks up from the cache"):
-        client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([reply], requests))
+        client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([RATE_LIMITED], requests))
 
     assert len(requests) == 4
-    assert clock.pauses == pauses
+    assert clock.pauses == [7.0, 7.0, 7.0]  # the 429 says to wait 7 s, so that is the pause
     calls = logged(session)
-    assert [call.outcome for call in calls] == [outcome] * 4  # every try is logged
-    assert calls[0].error.startswith(f"HTTP {reply[0]}: ")
+    assert [call.outcome for call in calls] == ["rate-limited"] * 4  # every try is logged
+    assert calls[0].error == "HTTP 429: Resource has been exhausted."
     assert session.scalars(select(AiCache)).all() == []  # nothing came back, so nothing was saved
+
+
+@pytest.mark.parametrize(
+    ("reply", "outcome"),
+    [
+        (UNAVAILABLE, "overloaded"),
+        (DEADLINE_EXCEEDED, "error"),
+        ((500, {"error": {"code": 500, "message": "Internal error encountered.", "status": "INTERNAL"}}), "error"),
+    ],
+)
+def test_other_errors_skip_the_input_after_four_tries(
+    session: Session, clock: FakeClock, run: StageRun, reply: tuple[int, dict[str, Any]], outcome: str
+) -> None:
+    requests: list[httpx.Request] = []
+
+    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([reply], requests))
+
+    assert result is None  # skipped: the stage moves on to its next input
+    assert len(requests) == 4
+    assert clock.pauses == [15, 30, 60]  # these errors suggest no delay, so the default pauses apply
+    calls = logged(session)
+    assert [call.outcome for call in calls] == [outcome] * 4
+    assert calls[0].error.startswith(f"HTTP {reply[0]}: ")
+
+
+def test_an_error_retrying_cant_fix_skips_the_input_at_once(session: Session, run: StageRun) -> None:
+    requests: list[httpx.Request] = []
+    bad_request = (400, {"error": {"code": 400, "message": "Request contains an invalid argument.", "status": "INVALID_ARGUMENT"}})
+
+    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([bad_request], requests))
+
+    assert result is None
+    assert len(requests) == 1
+    assert [(call.outcome, call.error) for call in logged(session)] == [("error", "HTTP 400: Request contains an invalid argument.")]
 
 
 def test_missing_key_is_named_before_any_call(session: Session, run: StageRun) -> None:
