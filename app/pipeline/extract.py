@@ -90,20 +90,7 @@ def extract(session: Session, settings: Settings) -> int:
         .where(Contractor.last_seen_run == latest_run)
         .order_by(Contractor.gaf_id)
     ).all()
-    # Ids grow as pages are saved, so the highest id per contractor is its latest homepage.
-    latest_homepage_ids = (
-        select(func.max(RawResponse.id))
-        .where(RawResponse.source == websites.HOMEPAGE_SOURCE, RawResponse.status_code == 200)
-        .group_by(RawResponse.contractor_id)
-    )
-    homepages = {
-        contractor_id: (url, html)
-        for contractor_id, url, html in session.execute(
-            select(RawResponse.contractor_id, RawResponse.url, RawResponse.body).where(
-                RawResponse.id.in_(latest_homepage_ids)
-            )
-        )
-    }
+    homepages = latest_homepages(session)
 
     run = StageRun(stage="extract", model=settings.gemini_model)
     session.add(run)
@@ -113,20 +100,16 @@ def extract(session: Session, settings: Settings) -> int:
     stored = dropped = skipped = 0
     try:
         for number, (gaf_id, about_text, profile_url) in enumerate(contractors, start=1):
-            texts: dict[str, str] = {}  # source -> its text, as the model sees it
-            urls: dict[str, str | None] = {}  # source -> where that text came from
-            if about_text:
-                texts["about_text"], urls["about_text"] = about_text, profile_url
             homepage_url, html = homepages.get(gaf_id, (None, None))
-            homepage_text = " ".join(BeautifulSoup(html, "html.parser").get_text(" ").split()) if html else ""
-            if homepage_text:
-                texts["homepage"], urls["homepage"] = homepage_text[:HOMEPAGE_CHARS], homepage_url
+            texts = source_texts(about_text, html)
+            urls = {"about_text": profile_url, "homepage": homepage_url}  # where each source's text came from
 
             rows: list[dict[str, str]] = []
             if texts:
                 inputs[INPUT_KINDS[tuple(texts)]] += 1
-                input_text = "\n\n".join(f"{HEADINGS[source]}\n{text}" for source, text in texts.items())
-                facts = ai.generate(session, settings, PROMPT, input_text, ContractorFacts, run=run, contractor_id=gaf_id)
+                facts = ai.generate(
+                    session, settings, PROMPT, model_input(texts), ContractorFacts, run=run, contractor_id=gaf_id
+                )
                 if facts is None:
                     skipped += 1
                     outcome = "no valid answer, so skipped with no facts (its attempts are in ai_calls)"
@@ -172,6 +155,40 @@ def extract(session: Session, settings: Settings) -> int:
         session.commit()
         print(f"extract: {run.status}: " + ", ".join(f"{name} {value}" for name, value in run.totals.items()))
     return stored
+
+
+def latest_homepages(session: Session) -> dict[str, tuple[str, str]]:
+    """Each contractor's latest saved homepage (HTTP 200): GAF ID -> (its URL, its HTML)."""
+    # Ids grow as pages are saved, so the highest id per contractor is its latest homepage.
+    latest_ids = (
+        select(func.max(RawResponse.id))
+        .where(RawResponse.source == websites.HOMEPAGE_SOURCE, RawResponse.status_code == 200)
+        .group_by(RawResponse.contractor_id)
+    )
+    rows = session.execute(
+        select(RawResponse.contractor_id, RawResponse.url, RawResponse.body).where(RawResponse.id.in_(latest_ids))
+    )
+    return {contractor_id: (url, html) for contractor_id, url, html in rows}
+
+
+def source_texts(about_text: str | None, homepage_html: str | None) -> dict[str, str]:
+    """The texts the model is given about a contractor: source ("about_text" or "homepage") -> text.
+
+    The homepage's text is what a visitor sees, whitespace collapsed and cut to
+    HOMEPAGE_CHARS characters. A source with no text is left out.
+    """
+    texts = {}
+    if about_text:
+        texts["about_text"] = about_text
+    homepage_text = " ".join(BeautifulSoup(homepage_html, "html.parser").get_text(" ").split()) if homepage_html else ""
+    if homepage_text:
+        texts["homepage"] = homepage_text[:HOMEPAGE_CHARS]
+    return texts
+
+
+def model_input(texts: dict[str, str]) -> str:
+    """The input sent after the prompt: each source's text under its heading."""
+    return "\n\n".join(f"{HEADINGS[source]}\n{text}" for source, text in texts.items())
 
 
 def ground(facts: ContractorFacts, texts: dict[str, str]) -> tuple[list[dict[str, str]], int]:
