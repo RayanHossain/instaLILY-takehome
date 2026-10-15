@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
 from app.db.models import Contractor, ContractorBrief, Fact, Rep, Run, Score
+from app.services.notes import lead_notes
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
@@ -195,3 +196,27 @@ def test_the_header_links_the_website_only_when_there_is_one(app: AppTest) -> No
     app.session_state["lead_id"] = "3"
     app.run()  # Gamma
     assert [button.label for button in app.main.get("link_button")] == ["Website", "GAF profile"]
+
+
+def test_logging_a_call_saves_the_outcome_and_opens_the_next_lead(app: AppTest, session: Session) -> None:
+    app.run()  # Alpha, the top lead, is selected
+    next(button for button in app.button if button.label == "Call").click().run()
+
+    app.segmented_control(key="outcome_1").set_value("Contacted")
+    app.text_area(key="call_note_1").set_value("Left a voicemail.")
+    next(button for button in app.button if button.label == "Log call").click().run()
+
+    assert [(note.status, note.text) for note in lead_notes(session, 1, "1")] == [("Contacted", "Left a voicemail.")]
+    assert shown_lead(app) == "Beta Roofing"  # the next lead, and its call sheet opens
+    assert any(button.label == "Log call" for button in app.button)
+    assert len(app.dataframe[0].value) == 2  # Alpha left To contact
+
+
+def test_j_and_k_move_down_and_up_the_table(app: AppTest) -> None:
+    app.run()
+    down = next(button for button in app.button if button.help == "Next lead (J)")
+    down.click().run()
+    assert shown_lead(app) == "Beta Roofing"
+
+    next(button for button in app.button if button.help == "Previous lead (K)").click().run()
+    assert shown_lead(app) == "Alpha Roofing"

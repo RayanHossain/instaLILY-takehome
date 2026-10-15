@@ -32,6 +32,12 @@ def plain(text: str) -> str:
     return re.sub(r"([\\`*_{}\[\]()#+\-.!|$~<>:])", r"\\\1", text)
 
 
+def call_link(phone: str) -> str:
+    """The phone number as a Markdown tap-to-call link."""
+    digits = re.sub(r"\D", "", phone)
+    return f":material/call: [{plain(phone)}](tel:+1{digits[-10:]})"
+
+
 def remember_pick() -> None:
     """Store the clicked lead's id. Row positions change with every filter, sort, and preset; ids don't."""
     rows, ids = st.session_state.lead_table["selection"]["rows"], st.session_state.shown_ids
@@ -39,8 +45,58 @@ def remember_pick() -> None:
         st.session_state.lead_id = ids[rows[0]]
 
 
-def show_header(lead: data.LeadDetail) -> None:
-    """The detail panel's header: the name with tier and flag badges, one caption line, the phone and links, and About."""
+def step_lead(step: int) -> None:
+    """Move the selection one lead down the table (J, step 1) or up it (K, step -1)."""
+    ids = st.session_state.shown_ids
+    position = ids.index(st.session_state.lead_id) + step
+    st.session_state.lead_id = ids[min(max(position, 0), len(ids) - 1)]
+
+
+def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None) -> None:
+    """Save the call sheet's outcome and note through the services, then queue the next lead's call sheet."""
+    outcome = st.session_state[f"outcome_{gaf_id}"]
+    data.add_note(rep_id, gaf_id, outcome, st.session_state[f"call_note_{gaf_id}"])
+    st.session_state.pop(f"status_{gaf_id}", None)  # the Notes tab's picker starts on the new status
+    st.toast(f"Logged: {name} is now {outcome}")
+    if next_id:
+        st.session_state.lead_id = next_id
+        st.session_state.call_next = True  # main() opens the next lead's call sheet
+
+
+@st.dialog("Call sheet", width="medium", position="right")
+def call_sheet(rep_id: int, lead: data.LeadDetail, next_id: str | None) -> None:
+    """The call sheet, a drawer beside the table: the opener, questions to tick off, follow-ups, and the outcome.
+
+    "Log call" (Cmd+Enter) saves the outcome and note through the services, then opens
+    the next lead's call sheet.
+    """
+    st.markdown(f"**{plain(lead.name)}**")
+    if lead.phone:
+        st.markdown(call_link(lead.phone))
+    if lead.brief:
+        st.markdown(f"> {plain(lead.brief.first_touch.opener)}")
+        st.markdown("**Ask**")
+        for number, question in enumerate(lead.brief.questions):
+            st.checkbox(plain(question), key=f"asked_{lead.gaf_id}_{number}")
+        st.markdown("**Then**")
+        st.markdown("\n".join(f"- {plain(follow_up.step)}" for follow_up in lead.brief.follow_ups))
+    else:
+        st.caption(f"No brief: briefs are written for each preset's top {data.top_leads_per_preset()} leads.")
+
+    st.segmented_control("Outcome", data.STATUSES[1:], default="Contacted", required=True, key=f"outcome_{lead.gaf_id}")
+    st.text_area("Note", key=f"call_note_{lead.gaf_id}", placeholder="What did they say?")
+    # log_call saves before anything redraws; the rerun then closes this sheet and redraws the page.
+    log_args = (rep_id, lead.gaf_id, lead.name, next_id)
+    if st.button("Log call", key=f"log_{lead.gaf_id}", type="primary", shortcut="Cmd+Enter", on_click=log_call, args=log_args):
+        st.rerun()
+
+
+def show_header(lead: data.LeadDetail) -> bool:
+    """The detail panel's header: the name with tier and flag badges, one caption line, the phone and links, and About.
+
+    Returns:
+        True when the rep clicked Call.
+    """
     with st.container(gap="xsmall"):
         with st.container(horizontal=True, vertical_alignment="center", gap="xsmall"):
             st.subheader(lead.name, anchor=False, width="content")
@@ -60,9 +116,9 @@ def show_header(lead: data.LeadDetail) -> None:
         st.caption(" · ".join(part for part in parts if part))
 
         with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            called = st.button("Call", icon=":material/phone_in_talk:", type="primary")
             if lead.phone:
-                digits = re.sub(r"\D", "", lead.phone)
-                st.markdown(f":material/call: [{plain(lead.phone)}](tel:+1{digits[-10:]})", width="content")
+                st.markdown(call_link(lead.phone), width="content")
             if lead.website_url:
                 st.link_button("Website", lead.website_url, icon=":material/language:")
             if lead.profile_url:
@@ -72,6 +128,7 @@ def show_header(lead: data.LeadDetail) -> None:
             with st.expander("About"):
                 with st.container(height=150, border=False):
                     st.markdown(plain(lead.about_text))
+    return called
 
 
 def show_why(lead: data.LeadDetail, weights: data.Preset) -> None:
@@ -201,15 +258,19 @@ def main() -> None:
     with table_column:
         statuses = data.current_statuses(rep.id, [lead.gaf_id for lead in leads])
         counts = {group: sum(data.status_group(statuses[lead.gaf_id]) == group for lead in leads) for group in data.STATUS_GROUPS}
-        group = st.segmented_control(
-            "Status",
-            [*data.STATUS_GROUPS, "All"],
-            default="To contact",
-            required=True,
-            key="status_group",
-            format_func=lambda option: f"{option} {counts[option]}" if option in counts else option,
-            label_visibility="collapsed",
-        )
+        with st.container(horizontal=True, vertical_alignment="center"):
+            group = st.segmented_control(
+                "Status",
+                [*data.STATUS_GROUPS, "All"],
+                default="To contact",
+                required=True,
+                key="status_group",
+                format_func=lambda option: f"{option} {counts[option]}" if option in counts else option,
+                label_visibility="collapsed",
+            )
+            st.space("stretch")
+            st.button(":material/keyboard_arrow_up:", help="Previous lead (K)", shortcut="K", type="tertiary", on_click=step_lead, args=(-1,))
+            st.button(":material/keyboard_arrow_down:", help="Next lead (J)", shortcut="J", type="tertiary", on_click=step_lead, args=(1,))
         leads = [lead for lead in leads if group == "All" or data.status_group(statuses[lead.gaf_id]) == group]
         if not leads:
             st.info("No leads here. Try another status, search, or wider filters.")
@@ -222,7 +283,9 @@ def main() -> None:
         st.session_state.shown_ids = ids
         if st.session_state.get("lead_id") not in ids:  # the first run, or the lead left the list
             st.session_state.lead_id = ids[0]
-        st.session_state.lead_table = {"selection": {"rows": [ids.index(st.session_state.lead_id)], "columns": [], "cells": []}}
+        position = ids.index(st.session_state.lead_id)
+        st.session_state.lead_table = {"selection": {"rows": [position], "columns": [], "cells": []}}
+        next_id = ids[position + 1] if position + 1 < len(ids) else None
 
         st.dataframe(
             [
@@ -253,7 +316,8 @@ def main() -> None:
 
     with detail_column:
         lead = data.get_lead(st.session_state.lead_id, preset)
-        show_header(lead)
+        if show_header(lead) or st.session_state.pop("call_next", False):
+            call_sheet(rep.id, lead, next_id)
 
         why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"], height=355)
         with why_tab:
