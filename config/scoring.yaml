@@ -1,6 +1,6 @@
 # Scoring rules for the score stage: every number the rules use, loaded and checked by app/scoring.py.
 # Bump rules_version whenever a number changes, so each stored score says which rules made it.
-rules_version: "1"
+rules_version: "2"  # 2: the earliest founding year either source gives; "New business" under 3 years
 
 # A signal with no data scores this, so missing data is neutral.
 missing_points: 50
@@ -52,7 +52,7 @@ stability:
 flags:
   low_rating_below: 3.5         # "Low rating" (risk): rated below this...
   low_rating_min_reviews: 5     # ...from at least this many reviews
-  new_business_years_under: 2   # "New business" (opportunity): founded fewer than this many years ago
+  new_business_years_under: 3   # "New business" (opportunity): founded fewer than this many years ago
 
 # Weights for value / winnability / stability / distance. Each preset must add up to 100.
 default_preset: Balanced

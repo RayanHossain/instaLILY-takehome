@@ -13,6 +13,7 @@ from app.scoring import (
     average,
     distance_signals,
     flags,
+    founding_year,
     load_scoring_config,
     score_contractor,
     stability_signals,
@@ -99,8 +100,8 @@ def test_flags_fire_at_their_thresholds_and_not_just_past_them() -> None:
     assert flags(CONFIG, 3.4, 5, None, None) == [{"flag": "Low rating", "kind": "risk", "reason": "rated 3.4 from 5 reviews"}]
     assert flags(CONFIG, 3.5, 5, None, None) == []  # not below 3.5
     assert flags(CONFIG, 3.4, 4, None, None) == []  # too few reviews
-    assert flags(CONFIG, None, None, 1, 2025) == [{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}]
-    assert flags(CONFIG, None, None, 2, 2024) == []  # 2 years in business is not new
+    assert flags(CONFIG, None, None, 2, 2024) == [{"flag": "New business", "kind": "opportunity", "reason": "founded 2024"}]
+    assert flags(CONFIG, None, None, 3, 2023) == []  # 3 years in business is not new
 
 
 def test_score_contractor_records_where_the_founding_year_came_from() -> None:
@@ -121,6 +122,23 @@ def test_score_contractor_records_where_the_founding_year_came_from() -> None:
     assert scored["reasons"]["winnability"][0]["founded_from"] == "its extracted facts"
     assert scored["flags"] == [{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}]
     assert scored["rules_version"] == CONFIG.rules_version
+
+
+@pytest.mark.parametrize(
+    ("gaf_year", "extracted_year", "expected"),
+    [
+        (2009, None, (2009, "the GAF profile")),
+        (None, 2004, (2004, "its extracted facts")),
+        (2015, 2004, (2004, "its extracted facts")),  # GAF's year is later, perhaps when it joined GAF
+        (1984, 1995, (1984, "the GAF profile")),
+        (1990, 1990, (1990, "the GAF profile and its extracted facts")),
+        (None, None, (None, None)),
+    ],
+)
+def test_the_founding_year_is_the_earliest_either_source_gives(
+    gaf_year: int | None, extracted_year: int | None, expected: tuple[int | None, str | None]
+) -> None:
+    assert founding_year(gaf_year, extracted_year) == expected
 
 
 def test_a_preset_whose_weights_dont_add_up_to_100_fails_to_load() -> None:
