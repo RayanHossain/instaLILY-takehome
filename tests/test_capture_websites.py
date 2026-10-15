@@ -1,11 +1,13 @@
 """Homepage capture: the real adapter against a mock transport, run by the real stage."""
 
+from datetime import timedelta
+
 import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Contractor, RawResponse, Run
+from app.db.models import Contractor, RawResponse, Run, utc_now
 from app.pipeline.capture_websites import capture_websites
 from app.sources import websites
 
@@ -68,7 +70,14 @@ def test_capture_follows_redirects_records_refusals_and_skips_non_html(
     ]
     assert requests[0].headers["user-agent"].startswith("instaLILY-takehome-lead-research")
 
-    # A rerun skips the homepage saved less than 7 days ago and tries the others once more.
+    # A rerun skips the homepage saved, and the site that refused, less than 7 days ago; the PDF is tried again.
+    requests.clear()
+    capture_websites(session)
+    assert [str(request.url) for request in requests] == ["https://brochure.example/"]
+
+    # Once the refusal is more than 7 days old, the site is asked again.
+    pages["2"].fetched_at = utc_now() - timedelta(days=8)
+    session.commit()
     requests.clear()
     capture_websites(session)
     assert [str(request.url) for request in requests] == ["https://refuses.example/", "https://brochure.example/"]

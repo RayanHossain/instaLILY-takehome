@@ -1,8 +1,9 @@
 """Homepage capture stage: save the homepage of every contractor whose website answered.
 
 Each homepage is saved to raw_responses (source "contractor_website") before anything
-parses it. One saved in the last 7 days is skipped, so a rerun after a crash picks up
-where the last run stopped.
+parses it. A site whose homepage was saved in the last 7 days is skipped, so a rerun
+after a crash picks up where the last run stopped, and so is a site that refused us
+(403 or 429) in the last 7 days.
 """
 
 import hashlib
@@ -21,8 +22,9 @@ def capture_websites(session: Session) -> int:
     """Save the homepage of each contractor in the latest discover whose website check got an HTTP response.
 
     A page that comes back with any status other than 200 is saved too, with its status
-    code, and counted as failed; a 403 or 429 is recorded this way and never worked
-    around. A request that gets no response is saved with its error instead. Both are
+    code, and counted as failed. A 403 or 429 is recorded this way, never worked around,
+    and, like a saved homepage, keeps the site from being asked again for 7 days. Other
+    failures, and a request that gets no response (saved with its error instead), are
     retried next run. A 200 that isn't HTML (a PDF, say) is skipped and nothing is saved.
 
     Args:
@@ -33,12 +35,12 @@ def capture_websites(session: Session) -> int:
     """
     # Discover sets last_seen_run, so the highest one is the most recent discover run.
     latest_run = session.scalar(select(func.max(Contractor.last_seen_run)))
-    saved_recently = (
+    saved_or_refused_recently = (
         select(RawResponse.id)
         .where(
             RawResponse.contractor_id == Contractor.gaf_id,
             RawResponse.source == websites.HOMEPAGE_SOURCE,
-            RawResponse.status_code == 200,
+            RawResponse.status_code.in_([200, 403, 429]),  # saved, or refused: either way, not asked again yet
             RawResponse.fetched_at >= utc_now() - FRESH_FOR,
         )
         .exists()
@@ -50,7 +52,7 @@ def capture_websites(session: Session) -> int:
                 Contractor.last_seen_run == latest_run,
                 Contractor.website_url.is_not(None),
                 Contractor.website_status.is_not(None),  # the website check got an HTTP response
-                ~saved_recently,
+                ~saved_or_refused_recently,
             )
             .order_by(Contractor.gaf_id)
         ).all()
