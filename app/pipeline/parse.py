@@ -26,13 +26,19 @@ def parse(session: Session) -> int:
         .where(RawResponse.source == gaf_profile.SOURCE, RawResponse.status_code == 200)
         .group_by(RawResponse.contractor_id)
     )
+    stored_website_urls = dict(session.execute(select(Contractor.gaf_id, Contractor.website_url)).all())
     pages = session.execute(
         select(RawResponse.contractor_id, RawResponse.body).where(RawResponse.id.in_(latest_page_ids))
     )
-    rows = [
-        {"gaf_id": contractor_id, **gaf_profile.parse_profile(body), "updated_at": utc_now()}
-        for contractor_id, body in pages
-    ]
+
+    rows = []
+    for contractor_id, body in pages:
+        row = {"gaf_id": contractor_id, **gaf_profile.parse_profile(body), "updated_at": utc_now()}
+        if row["website_url"] != stored_website_urls.get(contractor_id):
+            # The website changed or went away, so the last check was of another URL: clear it,
+            # and check_websites will check the new one on its next run.
+            row.update(website_status=None, website_error=None, website_checked_at=None)
+        rows.append(row)
 
     # The upsert helper can't do this: its INSERT needs every NOT NULL column (name,
     # first_seen_run, ...), even when the row exists. These rows only update, by primary key.

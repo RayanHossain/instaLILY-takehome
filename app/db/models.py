@@ -76,7 +76,11 @@ class Contractor(Base):
 
 
 class RawResponse(Base):
-    """An HTTP response body exactly as received, saved before it is parsed."""
+    """One outgoing request and what came back, saved before anything parses it.
+
+    A response's body is kept exactly as received. A request that got no response
+    at all (a timeout, say) has no status_code, an empty body, and the error instead.
+    """
 
     __tablename__ = "raw_responses"
 
@@ -89,6 +93,8 @@ class RawResponse(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     # The HTTP status. Only 200s are parsed; other statuses are kept as a record of the failure.
     status_code: Mapped[int | None] = mapped_column(Integer)
+    # Only when nothing came back: the httpx error name, e.g. "ConnectTimeout".
+    error: Mapped[str | None] = mapped_column(String)
     content_type: Mapped[str | None] = mapped_column(String)
     # The JSON body we sent, for POST requests like a search page (its offset is in here).
     # Must never hold secrets; credentials go in headers, which are not saved.

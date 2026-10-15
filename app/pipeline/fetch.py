@@ -22,8 +22,8 @@ def fetch(session: Session) -> int:
     """Save the profile page of each contractor seen in the most recent discover.
 
     A page that comes back with any status other than 200 is saved too, with its
-    status code, and counted as failed. A request with no response (timeout, DNS,
-    connection) is printed and counted as failed. Both are retried on the next run.
+    status code, and counted as failed. A request that gets no response (timeout,
+    DNS, connection) is saved with its error instead. Both are retried next run.
 
     Args:
         session: An open session. Each page is committed as soon as it is saved.
@@ -54,30 +54,29 @@ def fetch(session: Session) -> int:
 
     saved = failed = 0
     for number, (gaf_id, result) in enumerate(gaf_profile.fetch_profiles(profile_urls), start=1):
+        page = RawResponse(run_id=latest_run, contractor_id=gaf_id, source=gaf_profile.SOURCE)
         if isinstance(result, httpx.RequestError):
-            failed += 1
-            print(f"fetch: {number}/{len(profile_urls)} {gaf_id} failed with no response ({type(result).__name__})")
-            continue
+            # Nothing came back, so the error is recorded in place of a response.
+            page.url = profile_urls[gaf_id]
+            page.error = type(result).__name__
+            page.body = ""
+            outcome = f"no response ({page.error})"
+        else:
+            page.url = str(result.url)
+            page.status_code = result.status_code
+            page.content_type = result.headers.get("content-type")
+            page.body = result.text
+            outcome = f"HTTP {result.status_code}"
+        page.content_hash = hashlib.sha256(page.body.encode()).hexdigest()
 
-        # Save the page first, whatever its status, so it's kept even if parsing fails later.
-        session.add(
-            RawResponse(
-                run_id=latest_run,
-                contractor_id=gaf_id,
-                source=gaf_profile.SOURCE,
-                url=str(result.url),
-                status_code=result.status_code,
-                content_type=result.headers.get("content-type"),
-                body=result.text,
-                content_hash=hashlib.sha256(result.content).hexdigest(),
-            )
-        )
+        # Save it before anything else: a good page is kept for parsing, a failure as a record.
+        session.add(page)
         session.commit()
-        if result.status_code == 200:
+        if page.status_code == 200:
             saved += 1
         else:
             failed += 1
-        print(f"fetch: {number}/{len(profile_urls)} {gaf_id} HTTP {result.status_code}")
+        print(f"fetch: {number}/{len(profile_urls)} {gaf_id} {outcome}")
 
     print(f"fetch: done, {saved} profiles saved, {failed} failed")
     return saved

@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Contractor, RawResponse, Run, utc_now
@@ -54,7 +54,8 @@ def test_fetch_saves_pages_records_failures_and_skips_fresh_profiles(
 
     assert fetch(session) == 1
     saved = {r.contractor_id: r for r in session.scalars(select(RawResponse))}
-    assert {gaf_id: r.status_code for gaf_id, r in saved.items()} == {"1000001": 200, "1000002": 404}
+    assert {gaf_id: r.status_code for gaf_id, r in saved.items()} == {"1000001": 200, "1000002": 404, "1000003": None}
+    assert (saved["1000003"].error, saved["1000003"].body) == ("ConnectTimeout", "")  # no response, so the error
     assert saved["1000001"].source == "gaf_profile"
     assert saved["1000001"].body == "<html>profile</html>"
     assert saved["1000001"].run_id == latest_run.id
@@ -68,3 +69,26 @@ def test_fetch_saves_pages_records_failures_and_skips_fresh_profiles(
     session.commit()
     fetch(session)
     assert requested[2] == ["1000001", "1000002", "1000003"]
+
+
+def test_pages_saved_before_a_refusal_are_kept(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = Run(territory_zip="10013", radius_miles=25)
+    session.add(run)
+    session.flush()
+    for gaf_id in ["1000001", "1000002"]:
+        add_contractor(session, gaf_id, run)
+    session.commit()
+
+    def refused_after_one(profile_urls: dict[str, str]) -> Iterator[tuple[str, httpx.Response | httpx.RequestError]]:
+        request = httpx.Request("GET", profile_urls["1000001"])
+        yield "1000001", httpx.Response(200, text="<html>profile</html>", request=request)
+        raise SystemExit("GAF refused the profile for 1000002 (HTTP 403), so the fetch stopped.")
+
+    monkeypatch.setattr(gaf_profile, "fetch_profiles", refused_after_one)
+
+    with pytest.raises(SystemExit):
+        fetch(session)
+    session.close()  # drops anything not committed
+
+    with Session(engine) as fresh:  # a new session sees only what was committed, as a rerun would
+        assert [r.contractor_id for r in fresh.scalars(select(RawResponse))] == ["1000001"]
