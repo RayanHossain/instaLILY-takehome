@@ -214,6 +214,23 @@ def test_other_errors_skip_the_input_after_four_tries(
     assert calls[0].error.startswith(f"HTTP {reply[0]}: ")
 
 
+def test_a_dropped_connection_is_retried_then_the_input_skipped(session: Session, clock: FakeClock, run: StageRun) -> None:
+    requests: list[httpx.Request] = []
+
+    def drops(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+
+    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=httpx.MockTransport(drops))
+
+    assert result is None  # skipped, rather than stopping the stage
+    assert len(requests) == 4
+    assert clock.pauses == [15, 30, 60]
+    calls = logged(session)
+    assert [call.outcome for call in calls] == ["error"] * 4
+    assert calls[0].error == "no answer (RemoteProtocolError: Server disconnected without sending a response.)"
+
+
 def test_an_error_retrying_cant_fix_skips_the_input_at_once(session: Session, run: StageRun) -> None:
     requests: list[httpx.Request] = []
     bad_request = (400, {"error": {"code": 400, "message": "Request contains an invalid argument.", "status": "INVALID_ARGUMENT"}})

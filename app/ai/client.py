@@ -208,9 +208,9 @@ def _ask(
 ) -> tuple[types.GenerateContentResponse, float] | None:
     """Send one request, paced, and return the response and the seconds it took, or None to skip this input.
 
-    Every failed attempt is logged. An error in RETRY_CODES (a 429, a 503, ...) or no answer
-    within the timeout is tried again after a pause: the one the error suggests, if it
-    suggests one. After four tries in all, a 429 stops the stage cleanly, since every
+    Every failed attempt is logged. An error in RETRY_CODES (a 429, a 503, ...), or no answer
+    at all (a timeout, or a connection that failed or dropped), is tried again after a pause:
+    the one the error suggests, if it suggests one. After four tries in all, a 429 stops the stage cleanly, since every
     other input would hit the same limit, and a rerun picks up from the cache. Any other
     error gives up on this input only: None, after four tries, or at once for an error
     that retrying can't fix (a 400, say).
@@ -235,8 +235,12 @@ def _ask(
             # A 429 can say how long to wait: {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "37s"}.
             details = error.details.get("error", {}).get("details", []) if isinstance(error.details, dict) else []
             suggested = [float(d["retryDelay"].removesuffix("s")) for d in details if d.get("@type", "").endswith("RetryInfo")]
-        except httpx.TimeoutException:
-            problem, rate_limited, suggested = f"no answer within {TIMEOUT_SECONDS} s", False, []
+        except httpx.TransportError as error:  # no answer at all: a timeout, or the connection failed or dropped
+            if isinstance(error, httpx.TimeoutException):
+                problem = f"no answer within {TIMEOUT_SECONDS} s"
+            else:
+                problem = f"no answer ({type(error).__name__}: {error})"
+            rate_limited, suggested = False, []
             log("error", seconds=time.monotonic() - _last_request_at, error=problem)
         else:
             return response, time.monotonic() - _last_request_at
