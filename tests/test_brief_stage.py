@@ -154,6 +154,18 @@ def test_a_lead_input_has_its_evidence_in_plain_words_but_never_its_scoring(sess
         assert word not in big.text.lower()
 
 
+def test_a_founded_year_fact_never_reaches_a_brief_input(session: Session) -> None:
+    add_scored_contractors(session)
+    founded = session.scalars(select(Fact).where(Fact.contractor_id == "new", Fact.field == "founded_year")).one()
+
+    new = lead_input(session, "new", load_selling_points())
+
+    assert "Founded in 2025" not in new.text and "founded_year" not in new.text
+    assert founded.id not in new.fact_ids  # so a brief can't cite it either
+    assert "Years in business: founding year unknown" in new.text  # GAF gives no year, and that's all it's told
+    assert "No facts are known about this contractor" in new.text
+
+
 def test_a_rerun_makes_no_calls_and_a_weight_change_briefs_only_the_newcomer(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     add_scored_contractors(session)
     requests = use_fake_gemini(monkeypatch, VALID_BRIEF)

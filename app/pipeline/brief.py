@@ -3,7 +3,8 @@
 The leads are the union of every preset's top N by total (N is TOP_LEADS_PER_PRESET,
 10 by default), ranked by the same top_leads the services use, so the two can't drift
 apart. Each lead's input is its name, city, tier, reviews and rating, years in business,
-distance, facts with their ids and quotes, and matched selling points: the evidence
+distance, facts with their ids and quotes (never a founded_year fact, so the "Years in
+business" line is the brief's only source for its age), and matched selling points: the evidence
 behind its scores in plain words, never a score component's name, and never its total,
 rank, or preset. A lead whose input is unchanged since its brief was written is
 skipped, so a rerun makes no AI calls and a weight change only briefs newcomers.
@@ -57,7 +58,11 @@ def lead_input(session: Session, gaf_id: str, selling_points: dict[str, str]) ->
     """
     contractor = session.get(Contractor, gaf_id)
     score = session.get(Score, gaf_id)
-    facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id)).all()
+    # Only GAF's year scores, so an extracted founding year stays on the Facts list but never
+    # reaches the brief: it can't be quoted, or cited, against the "Years in business" line.
+    facts = session.scalars(
+        select(Fact).where(Fact.contractor_id == gaf_id, Fact.field != "founded_year").order_by(Fact.id)
+    ).all()
     contractor_tier = tier(contractor.certifications)
     matched = briefs.match_selling_points(
         tier=contractor_tier,
