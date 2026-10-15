@@ -1,6 +1,6 @@
 """The UI's only way to the data: opens a database session and calls the services.
 
-app.py imports this module and nothing else from app, so every read the UI makes
+main.py imports this module and nothing else from app, so every read the UI makes
 goes through a service.
 """
 
@@ -13,7 +13,7 @@ from app.services import leads
 from app.services.leads import TIERS, LeadDetail, LeadRow
 from app.settings import Settings, load_territory
 
-# What app.py may use. TIERS and load_territory are passed through unchanged.
+# What main.py may use. TIERS and load_territory are passed through unchanged.
 __all__ = ["TIERS", "get_lead", "list_leads", "load_territory"]
 
 

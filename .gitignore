@@ -8,8 +8,9 @@ __pycache__/
 .env
 data/
 
-# Personal Claude Code instructions
+# Personal Claude Code instructions and preview config
 CLAUDE.local.md
+.claude/launch.json
 
 # Take-home brief materials (kept out of the public repo)
 *.pdf
