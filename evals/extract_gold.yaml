@@ -8,7 +8,9 @@
 #
 # Correct it by hand: delete values that are wrong or aren't facts, fix labels, merge
 # duplicates, and add facts the text states that no model found. Values are compared
-# case-insensitively with whitespace collapsed, so write each one as the right label.
+# ignoring case, punctuation, spacing, and a trailing plural "s" ("Roof Replacements."
+# matches "roof replacement"), so write each one as the right label. The exact text the
+# model saw for each contractor is in evals/inputs/<GAF ID>.txt after an eval run.
 # An owner is "Name (role)", or just the name when the text gives no role.
 
 "1002371":  # Rebuild America Inc, Mineola

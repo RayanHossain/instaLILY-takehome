@@ -1,5 +1,6 @@
 """The extraction eval against a small gold file, with the real AI client talking to a fake Gemini API."""
 
+import json
 import time
 from functools import partial
 from pathlib import Path
@@ -14,14 +15,15 @@ from tests.test_extract import SETTINGS, add_contractors, answer_with_the_fixtur
 
 # What the text really says about Matute Roofing, for this test: the fixture answer finds
 # "Roofing" (not a gold service), misses "Roof repair" and "Doors", and finds "Rockland
-# County, NY" (not gold), so precision and recall differ by field.
+# County, NY" (not gold), so precision and recall differ by field. Some gold values are
+# written differently from the answer's ("Metal roofings.", "Bergen County NJ") and still match.
 GOLD = """
 "1113654":
   founded_year: []
-  services: ["Residential roofing", "commercial  ROOFING", "Metal roofing", "Roof repair"]
+  services: ["Residential roofing", "commercial  ROOFING", "Metal roofings.", "Roof repair"]
   other_trades: ["Siding", "Gutters", "Windows", "Doors"]
   building_types: ["Residential", "Commercial"]
-  service_areas: ["North Jersey", "Bergen County, NJ"]
+  service_areas: ["North Jersey", "Bergen County NJ"]
   owner_names: []
 """
 
@@ -42,14 +44,17 @@ def test_the_eval_scores_each_field_and_answers_from_the_cache(
     monkeypatch.setattr(ai, "_last_request_at", 0.0)
     monkeypatch.setattr(time, "sleep", lambda seconds: None)
 
-    scores = {score.field: score for score in evaluate_extract(session, SETTINGS, gold_path)}
+    scores = {score.field: score for score in evaluate_extract(session, SETTINGS, gold_path, tmp_path / "inputs")}
 
     assert len(requests) == 1  # a cache miss: the AI is asked once
+    sent = json.loads(requests[0].content)["contents"][0]["parts"][0]["text"]
+    written = (tmp_path / "inputs" / "1113654.txt").read_text(encoding="utf-8")
+    assert written.startswith("About text, from the contractor's GAF profile:") and sent.endswith(written)  # the exact input
     assert (scores["services"].gold, scores["services"].found, scores["services"].right) == (4, 4, 3)
-    assert (scores["services"].precision, scores["services"].recall) == (0.75, 0.75)  # case and spacing don't matter
+    assert (scores["services"].precision, scores["services"].recall) == (0.75, 0.75)  # case, punctuation, plurals don't matter
     assert (scores["other_trades"].precision, scores["other_trades"].recall) == (1.0, 0.75)  # the invented solar quote was dropped
     assert (scores["service_areas"].precision, scores["service_areas"].recall) == (2 / 3, 1.0)
     assert (scores["founded_year"].precision, scores["founded_year"].recall) == (None, None)  # nothing to find, nothing found
 
-    evaluate_extract(session, SETTINGS, gold_path)
+    evaluate_extract(session, SETTINGS, gold_path, tmp_path / "inputs")
     assert len(requests) == 1  # the second eval is answered from the cache

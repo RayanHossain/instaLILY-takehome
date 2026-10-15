@@ -2,11 +2,13 @@
 
 The gold file is evals/extract_gold.yaml. Each gold contractor's input is built exactly as
 the extract stage builds it, so its answer comes from the AI cache when the stage has
-already asked; the AI is called only on a cache miss. The answer goes through the
-stage's grounding check, then each field's values are compared with the gold values,
-case-insensitively with whitespace collapsed.
+already asked; the AI is called only on a cache miss. That exact input is also written to
+evals/inputs/<GAF ID>.txt, to check the gold file against the source text. The answer
+goes through the stage's grounding check, then each field's values are compared with
+the gold values, ignoring case, punctuation, spacing, and a trailing plural "s".
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +21,8 @@ from app.pipeline import extract
 from app.settings import Settings
 
 GOLD = Path("evals/extract_gold.yaml")
-FIELDS = ["founded_year", "services", "other_trades", "building_types", "service_areas", "owner_names"]
+INPUTS = Path("evals/inputs")  # each gold contractor's exact input, rewritten on every run
+FIELDS =["founded_year", "services", "other_trades", "building_types", "service_areas", "owner_names"]
 
 
 @dataclass
@@ -42,7 +45,9 @@ class FieldScore:
         return self.right / self.gold if self.gold else None
 
 
-def evaluate_extract(session: Session, settings: Settings, gold_path: Path = GOLD) -> list[FieldScore]:
+def evaluate_extract(
+    session: Session, settings: Settings, gold_path: Path = GOLD, inputs_dir: Path = INPUTS
+) -> list[FieldScore]:
     """Score the extract prompt's answers for the gold contractors, field by field.
 
     The eval is a stage_runs row ("extract eval"), so its AI calls are in ai_calls and
@@ -52,6 +57,7 @@ def evaluate_extract(session: Session, settings: Settings, gold_path: Path = GOL
         session: An open session on the database holding the contractors' saved text.
         settings: The model whose answers are scored, and the key for a cache miss.
         gold_path: The gold file.
+        inputs_dir: Where each gold contractor's exact input is written, as <GAF ID>.txt.
 
     Returns:
         One FieldScore per field, in the order of the extract stage's output model.
@@ -61,6 +67,7 @@ def evaluate_extract(session: Session, settings: Settings, gold_path: Path = GOL
     """
     gold = yaml.safe_load(gold_path.read_text(encoding="utf-8"))
     homepages = extract.latest_homepages(session)
+    inputs_dir.mkdir(parents=True, exist_ok=True)
     run = StageRun(stage="extract eval", model=settings.gemini_model)
     session.add(run)
     session.commit()
@@ -74,6 +81,7 @@ def evaluate_extract(session: Session, settings: Settings, gold_path: Path = GOL
             texts = extract.source_texts(contractor.about_text, homepages.get(contractor.gaf_id, (None, None))[1])
             facts = None
             if texts:
+                (inputs_dir / f"{contractor.gaf_id}.txt").write_text(extract.model_input(texts), encoding="utf-8")
                 facts = ai.generate(
                     session,
                     settings,
@@ -104,5 +112,7 @@ def evaluate_extract(session: Session, settings: Settings, gold_path: Path = GOL
 
 
 def _normalize(value: str) -> str:
-    """Lowercase, with whitespace collapsed: how gold and found values are compared."""
-    return " ".join(value.lower().split())
+    """How gold and found values are compared: lowercase, without punctuation, whitespace
+    collapsed, and without a trailing plural "s", so "Roof Replacements." matches "roof replacement".
+    """
+    return " ".join(re.sub(r"[^\w\s]", "", value.lower()).split()).removesuffix("s")

@@ -9,7 +9,7 @@ import argparse
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
-from app.evals.extract import GOLD, FieldScore, evaluate_extract
+from app.evals.extract import GOLD, INPUTS, FieldScore, evaluate_extract
 from app.settings import Settings
 
 
@@ -31,6 +31,7 @@ def main() -> None:
         right=sum(score.right for score in scores),
     )
     print(f"extract eval: model {settings.gemini_model}, gold {GOLD} (AI calls behind it: python -m app.pipeline stats)")
+    print(f"each contractor's exact input: {INPUTS}/<GAF ID>.txt")
     print(f"{'field':<16}{'gold':>6}{'found':>7}{'right':>7}{'precision':>11}{'recall':>8}")
     for score in [*scores, overall]:
         precision = "-" if score.precision is None else f"{score.precision:.2f}"

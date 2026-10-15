@@ -7,6 +7,8 @@ __pycache__/
 # Local secrets and data
 .env
 data/
+# Rebuilt from data/ by every python -m app.evals extract run; scraped homepage text can name customers.
+evals/inputs/
 
 # Personal Claude Code instructions and preview config
 CLAUDE.local.md
