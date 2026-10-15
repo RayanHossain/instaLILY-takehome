@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.ai import client as ai
-from app.db.models import Contractor, Fact, RawResponse, utc_now
+from app.db.models import Contractor, Fact, RawResponse, StageRun, utc_now
 from app.settings import Settings
 from app.sources import websites
 
@@ -25,6 +25,12 @@ HOMEPAGE_CHARS = 4000  # the homepage's visible text is cut to this many charact
 HEADINGS = {
     "about_text": "About text, from the contractor's GAF profile:",
     "homepage": "Text of the contractor's homepage:",
+}
+# How a contractor is counted in the run's totals, by the sources its input had.
+INPUT_KINDS = {
+    ("about_text",): "About text only",
+    ("homepage",): "homepage only",
+    ("about_text", "homepage"): "About text and homepage",
 }
 
 
@@ -65,7 +71,9 @@ def extract(session: Session, settings: Settings) -> int:
     """Rebuild the facts of every contractor in the latest discover from its About text and homepage.
 
     A contractor with neither gets no AI call and keeps no facts. One whose answer is
-    still invalid after the AI client's retry is counted and keeps no facts.
+    still invalid after the AI client's retry is counted and keeps no facts. The run is
+    a stage_runs row; when it ends, finished or not, it gets its totals: the AI client's
+    counts from ai_calls, then contractors by input, facts kept, and grounding drops.
 
     Args:
         session: An open session. Each contractor's facts are committed together.
@@ -96,59 +104,72 @@ def extract(session: Session, settings: Settings) -> int:
         )
     }
 
+    run = StageRun(stage="extract", model=settings.gemini_model)
+    session.add(run)
+    session.commit()
+
     inputs: Counter[str] = Counter()  # contractors by the sources their input had
     stored = dropped = failed = 0
-    for number, (gaf_id, about_text, profile_url) in enumerate(contractors, start=1):
-        texts: dict[str, str] = {}  # source -> its text, as the model sees it
-        urls: dict[str, str | None] = {}  # source -> where that text came from
-        if about_text:
-            texts["about_text"], urls["about_text"] = about_text, profile_url
-        homepage_url, html = homepages.get(gaf_id, (None, None))
-        homepage_text = " ".join(BeautifulSoup(html, "html.parser").get_text(" ").split()) if html else ""
-        if homepage_text:
-            texts["homepage"], urls["homepage"] = homepage_text[:HOMEPAGE_CHARS], homepage_url
+    try:
+        for number, (gaf_id, about_text, profile_url) in enumerate(contractors, start=1):
+            texts: dict[str, str] = {}  # source -> its text, as the model sees it
+            urls: dict[str, str | None] = {}  # source -> where that text came from
+            if about_text:
+                texts["about_text"], urls["about_text"] = about_text, profile_url
+            homepage_url, html = homepages.get(gaf_id, (None, None))
+            homepage_text = " ".join(BeautifulSoup(html, "html.parser").get_text(" ").split()) if html else ""
+            if homepage_text:
+                texts["homepage"], urls["homepage"] = homepage_text[:HOMEPAGE_CHARS], homepage_url
 
-        rows: list[dict[str, str]] = []
-        if texts:
-            inputs[" and ".join(texts)] += 1
-            input_text = "\n\n".join(f"{HEADINGS[source]}\n{text}" for source, text in texts.items())
-            facts = ai.generate(session, settings, PROMPT, input_text, ContractorFacts)
-            if facts is None:
-                failed += 1
-                outcome = "answer still invalid after the retry, so no facts"
-            else:
-                rows, drops = ground(facts, texts)
-                dropped += drops
-                outcome = f"{len(rows)} facts" + (f", {drops} dropped by the grounding check" if drops else "")
-            print(f"extract: {number}/{len(contractors)} {gaf_id} {outcome}")
+            rows: list[dict[str, str]] = []
+            if texts:
+                inputs[INPUT_KINDS[tuple(texts)]] += 1
+                input_text = "\n\n".join(f"{HEADINGS[source]}\n{text}" for source, text in texts.items())
+                facts = ai.generate(session, settings, PROMPT, input_text, ContractorFacts, run=run, contractor_id=gaf_id)
+                if facts is None:
+                    failed += 1
+                    outcome = "answer still invalid after the retry, so no facts"
+                else:
+                    rows, drops = ground(facts, texts)
+                    dropped += drops
+                    outcome = f"{len(rows)} facts" + (f", {drops} dropped by the grounding check" if drops else "")
+                print(f"extract: {number}/{len(contractors)} {gaf_id} {outcome}")
 
-        # Replace the contractor's facts. No text, or an answer still invalid, leaves none.
-        session.execute(delete(Fact).where(Fact.contractor_id == gaf_id))
-        extracted_at = utc_now()
-        session.add_all(
-            Fact(
-                contractor_id=gaf_id,
-                **row,
-                source_url=urls[row["source"]],
-                model=settings.gemini_model,
-                prompt_version=PROMPT,
-                extracted_at=extracted_at,
+            # Replace the contractor's facts. No text, or an answer still invalid, leaves none.
+            # "fetch" also drops the deleted facts from the session, so a new fact that reuses
+            # a deleted one's id can't clash with a stale copy the caller still holds.
+            session.execute(delete(Fact).where(Fact.contractor_id == gaf_id).execution_options(synchronize_session="fetch"))
+            extracted_at = utc_now()
+            session.add_all(
+                Fact(
+                    contractor_id=gaf_id,
+                    **row,
+                    source_url=urls[row["source"]],
+                    model=settings.gemini_model,
+                    prompt_version=PROMPT,
+                    extracted_at=extracted_at,
+                )
+                for row in rows
             )
-            for row in rows
-        )
+            session.commit()
+            stored += len(rows)
+        run.status = "finished"
+    except BaseException:  # includes SystemExit when the AI client stops the stage, and Ctrl-C
+        session.rollback()
+        run.status = "failed"
+        raise
+    finally:
+        run.finished_at = utc_now()
+        run.totals = {
+            **ai.totals(session, run),
+            "contractors with text": sum(inputs.values()),
+            **{kind: inputs[kind] for kind in INPUT_KINDS.values()},
+            "facts kept": stored,
+            "grounding drops": dropped,
+            "answers still invalid": failed,
+        }
         session.commit()
-        stored += len(rows)
-
-    print(
-        f"extract: done, {sum(inputs.values())} contractors with text {dict(inputs)}, {stored} facts stored, "
-        f"{dropped} dropped by the grounding check, {failed} answers still invalid after the retry"
-    )
-    stats = ai.stats
-    print(
-        f"extract: {settings.gemini_model}: {stats.calls} AI calls, "
-        f"{stats.seconds / stats.calls if stats.calls else 0:.1f} s each on average, {stats.cache_hits} cache hits, "
-        f"{stats.invalid} invalid answers, HTTP errors retried {dict(stats.http_errors)}, {stats.timeouts} timeouts"
-    )
+        print(f"extract: {run.status}: " + ", ".join(f"{name} {value}" for name, value in run.totals.items()))
     return stored
 
 

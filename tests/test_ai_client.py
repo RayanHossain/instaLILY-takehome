@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import client
-from app.db.models import AiCache
+from app.db.models import AiCache, AiCall, StageRun
 from app.settings import Settings
 
 # _env_file=None: never read the developer's .env. The key only ever reaches the mock transport.
@@ -21,6 +21,7 @@ SETTINGS = Settings(
 )
 PROMPT = "company_v1"
 INPUT = "Acme Roofing has served Newark since 1999."
+VALID = '{"name": "Acme Roofing", "founded_year": 1999}'
 
 RATE_LIMITED = (
     429,
@@ -62,10 +63,9 @@ class FakeClock:
 
 @pytest.fixture(autouse=True)
 def clock(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeClock:
-    """A test prompt, fresh counts and pacing, and the fake clock."""
+    """A test prompt, fresh pacing, and the fake clock."""
     (tmp_path / f"{PROMPT}.txt").write_text("Return the company's name and founding year as JSON.")
     monkeypatch.setattr(client, "PROMPTS", tmp_path)
-    monkeypatch.setattr(client, "stats", client.Stats())
     monkeypatch.setattr(client, "_last_request_at", 0.0)
     fake = FakeClock()
     monkeypatch.setattr(time, "monotonic", fake.monotonic)
@@ -73,27 +73,51 @@ def clock(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeClock:
     return fake
 
 
+@pytest.fixture
+def run(session: Session) -> StageRun:
+    """The stage run a test's AI calls belong to."""
+    run = StageRun(stage="test", model=SETTINGS.gemini_model)
+    session.add(run)
+    session.commit()
+    return run
+
+
 def answer(text: str) -> tuple[int, dict[str, Any]]:
-    """A Gemini generateContent reply whose answer is text."""
-    return 200, {"candidates": [{"content": {"role": "model", "parts": [{"text": text}]}, "finishReason": "STOP"}]}
+    """A Gemini generateContent reply whose answer is text, reporting 120 tokens in and 30 out."""
+    return 200, {
+        "candidates": [{"content": {"role": "model", "parts": [{"text": text}]}, "finishReason": "STOP"}],
+        "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30},
+    }
 
 
-def fake_gemini(replies: list[tuple[int, dict[str, Any]]], requests: list[httpx.Request]) -> httpx.MockTransport:
-    """A fake Gemini API: answers each request with the next reply (the last one repeats) and keeps the requests."""
+def fake_gemini(
+    replies: list[tuple[int, dict[str, Any]]], requests: list[httpx.Request], clock: FakeClock | None = None
+) -> httpx.MockTransport:
+    """A fake Gemini API: answers each request with the next reply (the last one repeats) and keeps the requests.
+
+    Given the fake clock, each request takes 2.5 seconds on it.
+    """
 
     def handle(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if clock:
+            clock.now += 2.5
         status_code, body = replies.pop(0) if len(replies) > 1 else replies[0]
         return httpx.Response(status_code, json=body)
 
     return httpx.MockTransport(handle)
 
 
-def test_invalid_answer_is_retried_once_with_the_error(session: Session, clock: FakeClock) -> None:
-    requests: list[httpx.Request] = []
-    replies = [answer('{"name": "Acme Roofing"}'), answer('{"name": "Acme Roofing", "founded_year": 1999}')]
+def logged(session: Session) -> list[AiCall]:
+    """The ai_calls rows, oldest first."""
+    return list(session.scalars(select(AiCall).order_by(AiCall.id)))
 
-    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=fake_gemini(replies, requests))
+
+def test_invalid_answer_is_retried_once_with_the_error(session: Session, clock: FakeClock, run: StageRun) -> None:
+    requests: list[httpx.Request] = []
+    replies = [answer('{"name": "Acme Roofing"}'), answer(VALID)]
+
+    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini(replies, requests))
 
     assert result == Company(name="Acme Roofing", founded_year=1999)
     assert json.loads(requests[0].content)["generationConfig"]["maxOutputTokens"] == 2048  # a runaway answer is cut off
@@ -102,65 +126,104 @@ def test_invalid_answer_is_retried_once_with_the_error(session: Session, clock: 
     retry = json.loads(requests[1].content)["contents"]
     assert [turn["role"] for turn in retry] == ["user", "model", "user"]  # the question, the bad answer, the error
     assert "founded_year" in retry[2]["parts"][0]["text"]  # the error names the missing field
+    assert [call.outcome for call in logged(session)] == ["invalid", "ok after a retry"]
     assert clock.pauses == [6.0]  # paced: 10 requests per minute is one every 6 seconds
 
 
-def test_answer_still_invalid_after_the_retry_is_recorded_and_skipped(session: Session) -> None:
+def test_answer_still_invalid_after_the_retry_is_recorded_and_skipped(session: Session, run: StageRun) -> None:
     requests: list[httpx.Request] = []
 
-    result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=fake_gemini([answer("No idea.")], requests))
+    result = client.generate(
+        session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([answer("No idea.")], requests)
+    )
 
     assert result is None
     assert len(requests) == 2
-    assert (client.stats.invalid, client.stats.failed) == (2, 1)
+    assert [call.outcome for call in logged(session)] == ["invalid", "invalid"]
     assert [row.valid for row in session.scalars(select(AiCache))] == [False, False]
 
 
-def test_cache_hit_makes_no_call(session: Session) -> None:
+def test_cache_hit_makes_no_call(session: Session, run: StageRun) -> None:
     requests: list[httpx.Request] = []
     # Gemma sometimes wraps its JSON in a code fence despite the JSON mode; it is stripped before validation.
-    transport = fake_gemini([answer('```json\n{"name": "Acme Roofing", "founded_year": 1999}\n```')], requests)
+    transport = fake_gemini([answer(f"```json\n{VALID}\n```")], requests)
 
-    first = client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=transport)
-    second = client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=transport)
+    first = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport)
+    second = client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport)
 
     assert first == second == Company(name="Acme Roofing", founded_year=1999)
     assert len(requests) == 1
-    assert (client.stats.calls, client.stats.cache_hits) == (1, 1)
+    assert [(call.cache_hit, call.outcome) for call in logged(session)] == [(False, "ok"), (True, "ok")]
 
     # The model is part of the cache key, so another model is asked afresh.
     other_model = SETTINGS.model_copy(update={"gemini_model": "gemma-4-26b-a4b-it"})
-    client.generate(session, other_model, PROMPT, INPUT, Company, transport=transport)
+    client.generate(session, other_model, PROMPT, INPUT, Company, run=run, transport=transport)
     assert len(requests) == 2
 
 
 @pytest.mark.parametrize(
-    ("reply", "pauses"),
+    ("reply", "outcome", "pauses"),
     [
-        (RATE_LIMITED, [7.0, 7.0, 7.0]),  # the 429 says to wait 7 s, so that is the pause
-        (UNAVAILABLE, [15, 30, 60]),  # a 503 suggests nothing, so the default pauses apply
-        (DEADLINE_EXCEEDED, [15, 30, 60]),
+        (RATE_LIMITED, "rate-limited", [7.0, 7.0, 7.0]),  # the 429 says to wait 7 s, so that is the pause
+        (UNAVAILABLE, "overloaded", [15, 30, 60]),  # a 503 suggests nothing, so the default pauses apply
+        (DEADLINE_EXCEEDED, "error", [15, 30, 60]),
     ],
 )
 def test_retryable_error_stops_the_stage_cleanly_after_four_tries(
-    session: Session, clock: FakeClock, reply: tuple[int, dict[str, Any]], pauses: list[float]
+    session: Session, clock: FakeClock, run: StageRun, reply: tuple[int, dict[str, Any]], outcome: str, pauses: list[float]
 ) -> None:
     requests: list[httpx.Request] = []
 
     with pytest.raises(SystemExit, match="a rerun picks up from the cache"):
-        client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=fake_gemini([reply], requests))
+        client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([reply], requests))
 
     assert len(requests) == 4
-    assert client.stats.http_errors == {reply[0]: 4}
     assert clock.pauses == pauses
+    calls = logged(session)
+    assert [call.outcome for call in calls] == [outcome] * 4  # every try is logged
+    assert calls[0].error.startswith(f"HTTP {reply[0]}: ")
     assert session.scalars(select(AiCache)).all() == []  # nothing came back, so nothing was saved
 
 
-def test_missing_key_is_named_before_any_call(session: Session) -> None:
+def test_missing_key_is_named_before_any_call(session: Session, run: StageRun) -> None:
     requests: list[httpx.Request] = []
     no_key = SETTINGS.model_copy(update={"gemini_api_key": None})
 
     with pytest.raises(SystemExit, match="GEMINI_API_KEY"):
-        client.generate(session, no_key, PROMPT, INPUT, Company, transport=fake_gemini([answer("{}")], requests))
+        client.generate(session, no_key, PROMPT, INPUT, Company, run=run, transport=fake_gemini([answer("{}")], requests))
 
     assert requests == []
+    assert logged(session) == []
+
+
+def test_every_attempt_is_logged_and_counted(session: Session, clock: FakeClock, run: StageRun) -> None:
+    requests: list[httpx.Request] = []
+    transport = fake_gemini([UNAVAILABLE, answer('{"name": "Acme Roofing"}'), answer(VALID)], requests, clock)
+
+    client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport)
+    client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport)  # from the cache
+
+    assert len(requests) == 3
+    calls = logged(session)
+    assert [(c.outcome, c.cache_hit, c.latency_seconds, c.input_tokens, c.output_tokens) for c in calls] == [
+        ("overloaded", False, 2.5, None, None),  # a failed request reports no tokens
+        ("invalid", False, 2.5, 120, 30),
+        ("ok after a retry", False, 2.5, 120, 30),
+        ("ok", True, None, None, None),  # a cache hit makes no request
+    ]
+    assert {(c.run_id, c.stage, c.prompt_name, c.model) for c in calls} == {(run.id, "test", PROMPT, SETTINGS.gemini_model)}
+    assert calls[0].error == "HTTP 503: The model is overloaded."
+    assert "founded_year" in calls[1].error
+    assert client.totals(session, run) == {
+        "requests to the model": 3,
+        "cache hits": 1,
+        "ok": 0,
+        "ok after a retry": 1,
+        "invalid": 1,
+        "rate-limited": 0,
+        "overloaded": 1,
+        "error": 0,
+        "input tokens": 240,
+        "output tokens": 60,
+        "average seconds per answer": 2.5,
+    }

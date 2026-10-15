@@ -123,6 +123,44 @@ class AiCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class StageRun(Base):
+    """One run of a pipeline stage that calls the AI, with its totals once it ends."""
+
+    __tablename__ = "stage_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stage: Mapped[str] = mapped_column(String)  # e.g. "extract"
+    model: Mapped[str] = mapped_column(String)  # the AI model the run used (GEMINI_MODEL)
+    status: Mapped[str] = mapped_column(String, default="running")  # then "finished" or "failed"
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Written when the run ends: its AI attempts counted by outcome, tokens, and latency,
+    # then the stage's own numbers (for extract: facts kept and grounding drops).
+    totals: Mapped[dict[str, float] | None] = mapped_column(JSON)
+
+
+class AiCall(Base):
+    """One attempt by generate() to get an answer: a cache hit, or one request to the model."""
+
+    __tablename__ = "ai_calls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("stage_runs.id"), index=True)
+    stage: Mapped[str] = mapped_column(String)
+    contractor_id: Mapped[str | None] = mapped_column(ForeignKey("contractors.gaf_id"))
+    prompt_name: Mapped[str] = mapped_column(String)  # carries its version, e.g. "extract_facts_v1"
+    model: Mapped[str] = mapped_column(String)
+    cache_hit: Mapped[bool] = mapped_column(Boolean)
+    # "ok"; "ok after a retry" (valid only on the validation retry); "invalid"; "rate-limited"
+    # (HTTP 429); "overloaded" (HTTP 503); or "error" (any other API error, or a timeout).
+    outcome: Mapped[str] = mapped_column(String)
+    latency_seconds: Mapped[float | None] = mapped_column(Float)  # None for a cache hit
+    input_tokens: Mapped[int | None] = mapped_column(Integer)  # when the API reports them
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)  # what went wrong, for invalid and failed attempts
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Fact(Base):
     """One fact the AI extracted about a contractor, with the exact quote it rests on.
 
