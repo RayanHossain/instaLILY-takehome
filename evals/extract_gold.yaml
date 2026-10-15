@@ -1,0 +1,349 @@
+# Gold facts for the extraction eval: python -m app.evals extract scores each extracted
+# field's precision and recall against this file, from cached answers where it can.
+#
+# The contractors are the 10 from the seed-42 model comparison. Each list is pre-filled
+# with the union of the facts both models kept after the grounding check:
+# gemma-4-26b-a4b-it ("26b", from the comparison) and gemma-4-31b-it ("31b", from the
+# comparison and the full run). The comment after each value says which model found it.
+#
+# Correct it by hand: delete values that are wrong or aren't facts, fix labels, merge
+# duplicates, and add facts the text states that no model found. Values are compared
+# case-insensitively with whitespace collapsed, so write each one as the right label.
+# An owner is "Name (role)", or just the name when the text gives no role.
+
+"1002371":  # Rebuild America Inc, Mineola
+  founded_year: []
+  services:
+    - "Commercial Roofing"  # 31b
+    - "Residential Roofing"  # 31b
+    - "Residential Roofs"  # 31b
+    - "Roof Inspection"  # 31b
+    - "Roof repair"  # 31b
+    - "Roof replacement"  # 31b
+  other_trades:
+    - " sarafHome Remodeling"  # 31b
+    - "Door Installation"  # 31b
+    - "Gutters"  # 31b
+    - "Home Remodeling"  # 31b
+    - "Replacement Windows"  # 31b
+    - "Siding"  # 31b
+    - "Skylights"  # 31b
+    - "Solar Installation"  # 31b
+    - "Solar panels"  # 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "Residential"  # 31b
+    - "value: Commercial"  # 31b
+  service_areas:
+    - "Long Island"  # 31b
+    - "Mineola"  # 31b
+  owner_names: []
+
+"1005149":  # American Home Contractors Inc, Florham Park
+  founded_year: []
+  services:
+    - "Inspection"  # 26b
+    - "Roof inspections"  # 31b
+    - "Roof repair"  # 26b, 31b
+    - "Roof replacement"  # 26b, 31b
+    - "Roofing shingles"  # 31b
+    - "Shingle roofing"  # 26b
+    - "Storm damage repair"  # 26b, 31b
+  other_trades:
+    - "Door installation"  # 26b
+    - "Doors"  # 31b
+    - "Gutters"  # 26b, 31b
+    - "Siding"  # 26b, 31b
+    - "Solar"  # 26b, 31b
+    - "Window installation"  # 26b
+    - "Windows"  # 31b
+  building_types:
+    - "Residential"  # 26b, 31b
+  service_areas:
+    - "Florham Park, NJ"  # 31b
+    - "New Jersey"  # 26b, 31b
+  owner_names: []
+
+"1005443":  # Lakeland Roofing LLC, Pompton Lakes
+  founded_year:
+    - 1962  # 26b, 31b
+  services:
+    - "architectural shingles"  # 31b
+    - "asphalt shingles"  # 26b, 31b
+    - "metal roofing"  # 31b
+    - "Roof installation"  # 31b
+    - "roof installations"  # 26b, 31b
+    - "Roof repair"  # 31b
+    - "Roof repairs"  # 31b
+    - "Roof replacement"  # 31b
+    - "roof replacements"  # 26b, 31b
+    - "roofing repair"  # 26b
+  other_trades:
+    - "aluminum gutters"  # 31b
+    - "copper gutters"  # 31b
+    - "Fiber cement siding"  # 31b
+    - "Gutter repair"  # 31b
+    - "gutter repairs"  # 31b
+    - "Gutter replacement"  # 31b
+    - "gutter replacements"  # 31b
+    - "gutters"  # 26b, 31b
+    - "roofing, siding, and gutter solutions in our community. "  # 26b
+    - "seamless gutter installation"  # 31b
+    - "siding"  # 26b, 31b
+    - "vinyl siding"  # 31b
+    - "wood siding"  # 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "Residential"  # 31b
+  service_areas:
+    - "Bergen County"  # 31b
+    - "Bergen County, NJ"  # 31b
+    - "Essex County, NJ"  # 31b
+    - "Morris County"  # 31b
+    - "Morris County, NJ"  # 31b
+    - "Paramus, NJ"  # 31b
+    - "Passaic County"  # 31b
+    - "Passaic County, NJ"  # 31b
+    - "Pompton Lakes, NJ"  # 31b
+    - "Ramsey, NJ"  # 31b
+  owner_names: []
+
+"1005677":  # American Roofing and Siding, Belleville
+  founded_year:
+    - 2002  # 26b, 31b
+  services:
+    - ""  # 26b
+    - "gutter-replacement"  # 26b
+    - "inspect and repair"  # 26b
+    - "replace seal around outside vent"  # 26b
+    - "residential roofing"  # 26b
+    - "roof inspection"  # 26b, 31b
+    - "Roof installation"  # 31b
+    - "roof repair"  # 26b, 31b
+    - "roof replacement"  # 26b, 31b
+    - "roofing"  # 26b
+    - "roofing system installation"  # 26b
+    - "shingles"  # 26b
+    - "У_st_ck_ (shingle/cedar shake)"  # 26b
+  other_trades:
+    - "Gutters"  # 31b
+    - "Siding"  # 31b
+    - "value own"  # 31b
+    - "Windows"  # 31b
+  building_types:
+    - "Residential"  # 31b
+  service_areas:
+    - "Northern New Jersey"  # 31b
+  owner_names: []
+
+"1100484":  # The Carpenter's Touch LLC, Livingston
+  founded_year: []
+  services:
+    - "Roofing"  # 26b, 31b
+    - "Siding"  # 26b
+  other_trades:
+    - "Siding"  # 26b, 31b
+    - "Windows"  # 31b
+  building_types: []
+  service_areas:
+    - "Livingston, NJ"  # 31b
+  owner_names: []
+
+"1112549":  # LGM Roofing Contractors, Bloomfield
+  founded_year:
+    - 2006  # 26b, 31b
+  services:
+    - "building-type: residential"  # 26b
+    - "commercial building-type: commercial"  # 26b
+    - "Commercial Roofing"  # 31b
+    - "commerical roofing"  # 26b
+    - "gutter installation"  # 26b
+    - "gutter-type: seamless gutters"  # 26b
+    - "metal roofing"  # 26b, 31b
+    - "offering new roof installation"  # 26b
+    - "residential roofing"  # 26b
+    - "roof inspection"  # 26b, 31b
+    - "Roof installation"  # 31b
+    - "roof maintenance"  # 26b, 31b
+    - "roof repair"  # 26b, 31b
+    - "Roof replacement"  # 26b, 31b
+    - "siding installation and replacement"  # 26b
+    - "Storm & Wind Damage"  # 31b
+  other_trades:
+    - "Gutter Installation"  # 31b
+    - "Seamless gutters + guards"  # 31b
+    - "Siding Installation & Replacement"  # 31b
+    - "value own"  # 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "Residential"  # 31b
+  service_areas:
+    - "Belleville"  # 31b
+    - "Bloomfield, NJ"  # 31b
+    - "Central New Jersey"  # 31b
+    - "Montclair"  # 31b
+    - "North Jersey"  # 31b
+    - "North New Jersey"  # 31b
+    - "Nutley"  # 31b
+    - "value own"  # 31b
+  owner_names: []
+
+"1116285":  # Allied Brothers Home Corporation, Wayne
+  founded_year:
+    - 1996  # 26b, 31b
+  services:
+    - "        "  # 26b
+    - "characters/roofing"  # 26b
+    - "Commercial roofing"  # 31b
+    - "e"  # 26b
+    - "hall-scale project.="  # 26b
+    - "igate-scale project.="  # 26b
+    - "letext-text-scale project="  # 26b
+    - "levee-scale project"  # 26b
+    - "loop-scale project"  # 26b
+    - "Metal roof"  # 26b, 31b
+    - "New Roof Installation"  # 31b
+    - "Residential roofing"  # 31b
+    - "Roof inspection"  # 26b, 31b
+    - "Roof repair"  # 26b, 31b
+    - "Roof replacement"  # 26b, 31b
+    - "Roofing"  # 26b
+    - "Roofing { "  # 26b
+    - "string-scale project.="  # 26b
+    - "token-scale project"  # 26b
+    - "value-scale project.="  # 26b
+  other_trades:
+    - "Addition"  # 31b
+    - "Chimney"  # 31b
+    - "Deck"  # 31b
+    - "Deck Repair"  # 31b
+    - "Door"  # 31b
+    - "Front Porch"  # 31b
+    - "Gutter"  # 31b
+    - "Gutters"  # 31b
+    - "Leaf Gutter Guards"  # 31b
+    - "Siding"  # 31b
+    - "Solar"  # 31b
+    - "Windows"  # 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "value's residential"  # 31b
+  service_areas:
+    - "New Jersey"  # 31b
+    - "New Jersey's tri-state area"  # 31b
+    - "New Jersey’s tri-state area"  # 31b
+  owner_names: []
+
+"1126890":  # Simbaina Home Improvement LLC, Irvington
+  founded_year:
+    - 2011  # 31b
+  services:
+    - "Roof inspection"  # 31b
+    - "Roof inspections"  # 31b
+    - "Roof repair"  # 26b, 31b
+    - "Roof replacement"  # 26b, 31b
+    - "Roofing installation"  # 26b, 31b
+  other_trades:
+    - "Gutter"  # 26b
+    - "Gutters"  # 31b
+    - "Siding"  # 26b, 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "Commercial building"  # 31b
+    - "Residential"  # 26b, 31b
+  service_areas:
+    - "Irvington, New Jersey"  # 26b, 31b
+  owner_names:
+    - "Luis Simbaina (Owner and operator)"  # 26b
+    - "Luis Simbaina (Owner)"  # 31b
+
+"1146349":  # DeFalco Roofing, Fairfield
+  founded_year: []
+  services:
+    - "="  # 26b
+    - "HOME ROOFING"  # 26b
+    - "Inspection"  # 26b
+    - "New roof installations"  # 31b
+    - "New roofs"  # 26b
+    - "Roof inspection"  # 26b, 31b
+    - "Roof installation"  # 26b, 31b
+    - "Roof repair"  # 26b, 31b
+    - "Roof replacement"  # 26b, 31b
+  other_trades:
+    - "get window installation"  # 31b
+    - "Gutters"  # 31b
+    - "Siding"  # 26b, 31b
+    - "w_i_d_e_r"  # 26b
+    - "w_i_n_d_o_w_s"  # 26b
+    - "Windows"  # 31b
+  building_types:
+    - "Commercial"  # 26b, 31b
+    - "Residential"  # 26b, 31b
+    - "residential and commercial"  # 26b
+    - "value rest own commercial"  # 31b
+  service_areas:
+    - " SBC Pequannock Township, NJ"  # 31b
+    - "Belleville, NJ"  # 31b
+    - "Bloomfield, NJ"  # 31b
+    - "Caldwell, NJ"  # 31b
+    - "Cedar Grove, NJ"  # 31b
+    - "Chatham, NJ"  # 26b, 31b
+    - "East Hanover, NJ"  # 26b, 31b
+    - "Essex Fells, NJ"  # 31b
+    - "Fairfield, NJ"  # 26b, 31b
+    - "Livingston, NJ"  # 31b
+    - "Montville, NJ"  # 26b, 31b
+    - "Morristown, NJ"  # 31b
+    - "New Jersey"  # 26b, 31b
+    - "North & South Jersey"  # 26b
+    - "North Caldwell, NJ"  # 31b
+    - "North Jersey"  # 31b
+    - "Nutley, NJ"  # 31b
+    - "Pequannock Township, NJ"  # 31b
+    - "Roseland, NJ"  # 31b
+    - "South Jersey"  # 31b
+    - "Springfield, NJ"  # 26b, 31b
+    - "Totowa, NJ"  # 31b
+    - "Township, NJ"  # 26b
+    - "Verona, NJ"  # 31b
+    - "versions-und-South Jersey"  # 26b
+    - "Wayne, NJ"  # 26b, 31b
+    - "West Caldwell, NJ"  # 31b
+    - "📍 Caldwell, NJ"  # 31b
+  owner_names: []
+
+"1157826":  # Roof Manager, East Hanover
+  founded_year: []
+  services:
+    - "Commercial roofing"  # 31b
+    - "Flat and low-slope roofing"  # 31b
+    - "Free Roof Inspections"  # 31b
+    - "New Roof Installation"  # 31b
+    - "Roof inspections"  # 31b
+    - "Roof installation"  # 31b
+    - "Roof maintenance"  # 31b
+    - "Roof repair"  # 31b
+    - "Roof replacement"  # 31b
+    - "Storm damage restoration"  # 31b
+  other_trades:
+    - "Gutters"  # 31b
+    - "Siding"  # 31b
+    - "Trim & Fascia"  # 31b
+  building_types:
+    - "Commercial"  # 31b
+    - "Residential"  # 31b
+  service_areas:
+    - "Bergen County, NJ"  # 31b
+    - "Essex County, NJ"  # 31b
+    - "Hudson County, NJ"  # 31b
+    - "Hunterdon County, NJ"  # 31b
+    - "Middlesex County, NJ"  # 31b
+    - "Monmouth County, NJ"  # 31b
+    - "Morris County, NJ"  # 31b
+    - "Northern New Jersey"  # 31b
+    - "Passaic County, NJ"  # 31b
+    - "Somerset County, NJ"  # 31b
+    - "Sussex County, NJ"  # 31b
+    - "Union County, NJ"  # 31b
+    - "Warren County, NJ"  # 31b
+  owner_names: []
