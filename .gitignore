@@ -12,6 +12,10 @@ data/
 CLAUDE.local.md
 .claude/launch.json
 
+# Agent skills: symlinks into the streamlit package installed in .venv
+.claude/skills/
+.agents/skills/
+
 # Take-home brief materials (kept out of the public repo)
 *.pdf
 email instructions.md
