@@ -13,6 +13,32 @@ import streamlit as st
 from app.ui import data
 
 DASH = "—"  # shown for a missing value
+# Each detail tab scrolls inside a bordered box of this height, with the scrollbar below.
+TAB_HEIGHT = 310
+# Streamlit keeps a scrolling container's scrollbar hidden until the mouse is over it, and
+# macOS hides it until you scroll, so a box cut off between two sections looked finished.
+# This keeps a scrollbar showing in the detail boxes whenever there's more below. It targets
+# only their key= classes; grey and translucent for light and dark mode.
+# Chrome and Safari draw the -webkit- scrollbar, always visible, but only once the standard
+# scrollbar properties Streamlit sets are back to auto. Firefox has no -webkit- scrollbars,
+# so it gets a thin grey one instead.
+DETAIL_SCROLLBAR_CSS = """<style>
+:is(.st-key-why_box, .st-key-brief_box, .st-key-notes_box) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}
+:is(.st-key-why_box, .st-key-brief_box, .st-key-notes_box)::-webkit-scrollbar { width: 8px; }
+:is(.st-key-why_box, .st-key-brief_box, .st-key-notes_box)::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.6);
+    border-radius: 4px;
+}
+@supports not selector(::-webkit-scrollbar) {
+    :is(.st-key-why_box, .st-key-brief_box, .st-key-notes_box) {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(128, 128, 128, 0.6) transparent;
+    }
+}
+</style>"""
 
 # Each tag's chip color, by kind: tiers blue, an opportunity green, a risk red, Top pick
 # amber, Brief violet. Translucent, so the chips read in light and dark mode.
@@ -325,10 +351,14 @@ def main() -> None:
         if show_header(lead) or st.session_state.pop("call_next", False):
             call_sheet(rep.id, lead, statuses[lead.gaf_id], next_id)
 
-        why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"], height=355)
+        why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"])
+        st.html(DETAIL_SCROLLBAR_CSS)
         with why_tab:
-            show_why(lead, scoring.presets[preset])
+            with st.container(height=TAB_HEIGHT, border=True, key="why_box"):
+                show_why(lead, scoring.presets[preset])
         with brief_tab:
-            show_brief(lead)
+            with st.container(height=TAB_HEIGHT, border=True, key="brief_box"):
+                show_brief(lead)
         with notes_tab:
-            show_notes(rep.id, lead, statuses[lead.gaf_id])
+            with st.container(height=TAB_HEIGHT, border=True, key="notes_box"):
+                show_notes(rep.id, lead, statuses[lead.gaf_id])
