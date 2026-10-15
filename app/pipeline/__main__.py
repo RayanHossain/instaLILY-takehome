@@ -12,12 +12,13 @@ import yaml
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
+from app.pipeline.check_websites import check_websites
 from app.pipeline.discover import discover
 from app.pipeline.fetch import fetch
 from app.pipeline.parse import parse
 from app.settings import Settings
 
-STAGES = ["discover", "fetch", "parse"]
+STAGES = ["discover", "fetch", "parse", "check_websites"]
 
 
 def main() -> None:
@@ -44,6 +45,8 @@ def main() -> None:
                 fetch(session)
             elif stage == "parse":
                 parse(session)
+            elif stage == "check_websites":
+                check_websites(session)
 
 
 if __name__ == "__main__":

@@ -65,6 +65,11 @@ class Contractor(Base):
     google_review_count: Mapped[int | None] = mapped_column(Integer)
     about_text: Mapped[str | None] = mapped_column(Text)
     in_business_since: Mapped[int | None] = mapped_column(Integer)
+    # From one GET to website_url (check_websites stage): the HTTP status if anything
+    # answered, else the error ("timeout", "dns", "ssl", or "connection").
+    website_status: Mapped[int | None] = mapped_column(Integer)
+    website_error: Mapped[str | None] = mapped_column(String)
+    website_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     last_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
