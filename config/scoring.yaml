@@ -1,0 +1,62 @@
+# Scoring rules for the score stage: every number the rules use, loaded and checked by app/scoring.py.
+# Bump rules_version whenever a number changes, so each stored score says which rules made it.
+rules_version: "1"
+
+# A signal with no data scores this, so missing data is neutral.
+missing_points: 50
+
+# Value: how much business the contractor could bring.
+value:
+  reviews:              # GAF review count; none counts as 0
+    weight: 50
+    buckets:
+      - {at_least: 100, points: 90}
+      - {at_least: 25, points: 70}
+      - {at_least: 5, points: 55}
+      - {at_least: 0, points: 50}
+  tier:
+    weight: 30
+    points: {"President's Club": 100, "Master Elite": 85, "Certified Plus": 60, "Certified": 40}
+  other_trades:         # from the facts table: any other trade, or none
+    weight: 20
+    any: 80
+    none: 50
+
+# Winnability: how open the contractor is to a new supplier. A new business has no settled
+# supplier, so the relationship starts early. Proximity isn't a signal: distance is its own component.
+winnability:
+  years_in_business:
+    weight: 50
+    buckets:
+      - {at_least: 15, points: 40}
+      - {at_least: 5, points: 60}
+      - {at_least: 2, points: 85}
+      - {at_least: 0, points: 100}
+  tier:
+    weight: 50
+    points: {"Certified Plus": 80, "Certified": 60, "Master Elite": 50, "President's Club": 20}
+
+# Stability: how safe the account is. Years in business is deliberately not a signal here,
+# so a new business isn't penalized.
+stability:
+  min_reviews: 5        # the rating counts only with at least this many reviews
+  rating:
+    - {at_least: 4.5, points: 90}
+    - {at_least: 4.0, points: 75}
+    - {at_least: 3.5, points: 55}
+    - {at_least: 0, points: 25}
+
+# Distance has no numbers of its own: 100 at the branch, falling linearly to 0 at the
+# territory radius in config/distributor.yaml.
+
+flags:
+  low_rating_below: 3.5         # "Low rating" (risk): rated below this...
+  low_rating_min_reviews: 5     # ...from at least this many reviews
+  new_business_years_under: 2   # "New business" (opportunity): founded fewer than this many years ago
+
+# Weights for value / winnability / stability / distance. Each preset must add up to 100.
+default_preset: Balanced
+presets:
+  Balanced: {value: 35, winnability: 30, stability: 15, distance: 20}
+  Big accounts: {value: 55, winnability: 15, stability: 15, distance: 15}
+  Quick wins: {value: 15, winnability: 45, stability: 10, distance: 30}
