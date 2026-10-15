@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     coveo_org_id: str
     # SecretStr prints as '**********', so the keys stay out of reprs and logs.
     coveo_api_key: SecretStr
-    gemini_api_key: SecretStr
+    # Optional, so the UI runs without one: only the AI stages need it, and app/ai says so.
+    gemini_api_key: SecretStr | None = None
 
 
 def load_territory() -> dict[str, Any]:

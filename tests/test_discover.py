@@ -19,9 +19,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "coveo_page.json"
 TERRITORY = {"zip": "10013", "lat": 40.7217861, "lng": -74.0094471, "radius_miles": 25}
 # _env_file=None: never read the developer's .env. discover only uses the Coveo fields,
 # and fetch_pages is replaced below, so these values never leave the test.
-SETTINGS = Settings(
-    _env_file=None, database_url="unused", coveo_org_id="test-org", coveo_api_key="test-key", gemini_api_key="test-key"
-)
+SETTINGS = Settings(_env_file=None, database_url="unused", coveo_org_id="test-org", coveo_api_key="test-key")
 
 
 def test_second_run_adds_no_duplicates_and_moves_last_seen_run(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
