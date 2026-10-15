@@ -129,7 +129,7 @@ def test_cache_hit_makes_no_call(session: Session) -> None:
     assert (client.stats.calls, client.stats.cache_hits) == (1, 1)
 
     # The model is part of the cache key, so another model is asked afresh.
-    other_model = SETTINGS.model_copy(update={"gemini_model": "gemma-4-31b-it"})
+    other_model = SETTINGS.model_copy(update={"gemini_model": "gemma-4-26b-a4b-it"})
     client.generate(session, other_model, PROMPT, INPUT, Company, transport=transport)
     assert len(requests) == 2
 
