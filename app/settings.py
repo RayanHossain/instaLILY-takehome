@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     coveo_api_key: SecretStr
     # Optional, so the UI runs without one: only the AI stages need it, and app/ai says so.
     gemini_api_key: SecretStr | None = None
-    # The model every AI call uses, and the most requests to send it per minute.
-    gemini_model: str = "gemma-4-26b-a4b-it"
+    # The model every AI call uses, and the most requests to send it per minute. 31B gave
+    # valid answers for 10 of 10 sample contractors; 26B A4B looped on 4 of them.
+    gemini_model: str = "gemma-4-31b-it"
     gemini_requests_per_minute: PositiveInt = 10
 
 

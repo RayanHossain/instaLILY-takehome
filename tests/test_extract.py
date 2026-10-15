@@ -79,7 +79,7 @@ def test_extract_stores_grounded_facts_and_replaces_them(session: Session, monke
     assert "Solar panels" not in facts
     assert (facts["Roofing"].source, facts["Roofing"].source_url) == ("about_text", PROFILE_URL)
     assert (facts["Metal roofing"].source, facts["Metal roofing"].source_url) == ("homepage", "https://matuteroofing.com/")
-    assert {(fact.model, fact.prompt_version) for fact in facts.values()} == {("gemma-4-26b-a4b-it", "extract_facts_v1")}
+    assert {(fact.model, fact.prompt_version) for fact in facts.values()} == {(SETTINGS.gemini_model, "extract_facts_v1")}
     source_texts = {"about_text": normalize(ABOUT), "homepage": normalize(BeautifulSoup(HOMEPAGE, "html.parser").get_text(" "))}
     assert all(normalize(fact.evidence) in source_texts[fact.source] for fact in facts.values())
 
