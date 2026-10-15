@@ -24,3 +24,9 @@ email instructions.md
 
 # OS
 .DS_Store
+
+# Local working notes, such as review feedback (never committed)
+notes/
+
+# Copies of files Claude sends in the desktop app (never committed)
+Claude outputs/
