@@ -56,6 +56,15 @@ class Contractor(Base):
     specialties: Mapped[list[str]] = mapped_column(JSON, default=list)
     # None means GAF didn't say, which is different from "not enrolled".
     enrolled_in_gaf_leads: Mapped[bool | None] = mapped_column(Boolean)
+    # From the contractor's GAF profile page (parse stage). None when the page doesn't show it.
+    street_address: Mapped[str | None] = mapped_column(String)
+    website_url: Mapped[str | None] = mapped_column(String)
+    website_domain: Mapped[str | None] = mapped_column(String)  # lowercase, without "www."
+    google_place_id: Mapped[str | None] = mapped_column(String)
+    google_rating: Mapped[float | None] = mapped_column(Float)
+    google_review_count: Mapped[int | None] = mapped_column(Integer)
+    about_text: Mapped[str | None] = mapped_column(Text)
+    in_business_since: Mapped[int | None] = mapped_column(Integer)
     first_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     last_seen_run: Mapped[int] = mapped_column(ForeignKey("runs.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

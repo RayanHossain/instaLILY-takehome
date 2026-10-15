@@ -4,12 +4,18 @@ The search results link to one profile page per contractor. The page has details
 the search doesn't return, such as the street address and website.
 """
 
+import re
 import time
 from collections.abc import Iterator
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
+from bs4 import BeautifulSoup
 
 from app.sources import USER_AGENT
+
+SOURCE = "gaf_profile"  # raw_responses.source for saved profile pages
 
 
 def fetch_profiles(
@@ -58,3 +64,37 @@ def fetch_profiles(
                     "Profiles saved so far are kept, and a later rerun skips them."
                 )
             yield gaf_id, response
+
+
+def parse_profile(html: str) -> dict[str, Any]:
+    """Map one saved profile page to contractor column values.
+
+    A value the page doesn't show is None. The Google figures are read from the
+    "Google Reviews" section; the masthead at the top of the page repeats them.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    address = soup.select_one("address.image-masthead-carousel__address")
+    website = soup.find("a", string=lambda text: text is not None and text.strip() == "Visit Website")
+    place_link = soup.select_one('section.contractor-reviews a[href*="placeid="]')  # the "See All Reviews" button
+    rating = soup.select_one("section.contractor-reviews span.rating-stars__average")  # e.g. "4.9"
+    review_count = soup.select_one("section.contractor-reviews span.rating-stars__total")  # e.g. "(1846)"
+    # The page holds the whole About text; "Expand to read more" only un-hides it with CSS.
+    about = soup.select_one("section.about-us-block .about-us-block__description")
+    details = soup.select_one("section.contractor-details")
+    founded = re.search(r"In business since (\d{4})", details.get_text()) if details else None
+
+    website_url = website.get("href", "").strip() if website else ""
+    website_host = urlsplit(website_url).hostname if website_url else None  # hostname is lowercased
+    about_text = " ".join(about.get_text(" ").split()) if about else ""  # collapse the page's line breaks
+
+    return {
+        "street_address": address.get_text(strip=True) if address else None,
+        "website_url": website_url or None,
+        "website_domain": website_host.removeprefix("www.") if website_host else None,
+        "google_place_id": parse_qs(urlsplit(place_link["href"]).query)["placeid"][0] if place_link else None,
+        "google_rating": float(rating.get_text(strip=True)) if rating else None,
+        "google_review_count": int(re.sub(r"\D", "", review_count.get_text())) if review_count else None,
+        "about_text": about_text or None,
+        "in_business_since": int(founded.group(1)) if founded else None,
+    }

@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 from app.db.engine import make_engine
 from app.pipeline.discover import discover
 from app.pipeline.fetch import fetch
+from app.pipeline.parse import parse
 from app.settings import Settings
 
-STAGES = ["discover", "fetch"]
+STAGES = ["discover", "fetch", "parse"]
 
 
 def main() -> None:
@@ -41,6 +42,8 @@ def main() -> None:
                 print(f"discover: run {run.id} {run.status}, {run.contractors_seen} contractors seen")
             elif stage == "fetch":
                 fetch(session)
+            elif stage == "parse":
+                parse(session)
 
 
 if __name__ == "__main__":

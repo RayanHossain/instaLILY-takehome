@@ -1,11 +1,14 @@
-"""The GAF profile adapter: polite fetching with the cookie handshake, against a mock transport."""
+"""The GAF profile adapter: polite fetching (mock transport) and parsing (saved, trimmed real pages)."""
 
 import time
+from pathlib import Path
 
 import httpx
 import pytest
 
-from app.sources.gaf_profile import fetch_profiles
+from app.sources.gaf_profile import fetch_profiles, parse_profile
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 PROFILE_URLS = {
     "1000001": "https://www.gaf.com/en-us/roofing-contractors/residential/usa/ny/a/a-roofing-1000001",
@@ -77,3 +80,39 @@ def test_403_or_429_after_the_first_request_stops_the_run(status: int) -> None:
     with pytest.raises(SystemExit, match=f"HTTP {status}"):
         next(results)
     assert len(requested_paths) == 2  # the refused profile was asked for once: no retry after the first request
+
+
+def test_parse_profile_with_google_reviews_website_about_and_founding_year() -> None:
+    html = (FIXTURES / "gaf_profile_1113654.html").read_text(encoding="utf-8")
+
+    assert parse_profile(html) == {
+        "street_address": "50 Galesi Dr, Wayne NJ, 07470 USA",
+        "website_url": "https://www.matuteroofing.com/",
+        "website_domain": "matuteroofing.com",  # lowercase, without "www."
+        "google_place_id": "ChIJqzpJ3dYDw4kR2EdOcYM3L2w",
+        "google_rating": 5.0,
+        "google_review_count": 501,
+        # The whole About text, with the page's line breaks and double spaces collapsed.
+        "about_text": (
+            "Matute Roofing is a family owned and operated roofing company with over 20 years experience "
+            "Matute Roofing is Licensed and fully insured Matute Roofing is committed to providing you with "
+            "the finest products ,skilled workmanship and courteous service We are the honest dependable and "
+            "reliable you can TRUST"
+        ),
+        "in_business_since": 2009,
+    }
+
+
+def test_parse_profile_without_reviews_website_about_or_founding_year() -> None:
+    html = (FIXTURES / "gaf_profile_7158181.html").read_text(encoding="utf-8")
+
+    assert parse_profile(html) == {
+        "street_address": "36-20 168th St, Flushing NY, 11358 USA",
+        "website_url": None,
+        "website_domain": None,
+        "google_place_id": None,  # "See All Reviews" links to "#"
+        "google_rating": None,  # the page says "No Google Verified Reviews"
+        "google_review_count": None,
+        "about_text": None,
+        "in_business_since": None,
+    }

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.db.models import Contractor, RawResponse, utc_now
 from app.sources import gaf_profile
 
-SOURCE = "gaf_profile"
 FRESH_FOR = timedelta(days=7)
 
 
@@ -38,7 +37,7 @@ def fetch(session: Session) -> int:
         select(RawResponse.id)
         .where(
             RawResponse.contractor_id == Contractor.gaf_id,
-            RawResponse.source == SOURCE,
+            RawResponse.source == gaf_profile.SOURCE,
             RawResponse.status_code == 200,
             RawResponse.fetched_at >= utc_now() - FRESH_FOR,
         )
@@ -65,7 +64,7 @@ def fetch(session: Session) -> int:
             RawResponse(
                 run_id=latest_run,
                 contractor_id=gaf_id,
-                source=SOURCE,
+                source=gaf_profile.SOURCE,
                 url=str(result.url),
                 status_code=result.status_code,
                 content_type=result.headers.get("content-type"),
