@@ -64,7 +64,7 @@ def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None) -> None:
 
 
 @st.dialog("Call sheet", width="medium", position="right")
-def call_sheet(rep_id: int, lead: data.LeadDetail, next_id: str | None) -> None:
+def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | None) -> None:
     """The call sheet, a drawer beside the table: the opener, questions to tick off, follow-ups, and the outcome.
 
     "Log call" (Cmd+Enter) saves the outcome and note through the services, then opens
@@ -83,7 +83,9 @@ def call_sheet(rep_id: int, lead: data.LeadDetail, next_id: str | None) -> None:
     else:
         st.caption(f"No brief: briefs are written for each preset's top {data.top_leads_per_preset()} leads.")
 
-    st.segmented_control("Outcome", data.STATUSES[1:], default="Contacted", required=True, key=f"outcome_{lead.gaf_id}")
+    # Starts on the lead's current status, so logging a call never moves it back down the ladder.
+    outcome = "Contacted" if status == "New" else status
+    st.segmented_control("Outcome", data.STATUSES[1:], default=outcome, required=True, key=f"outcome_{lead.gaf_id}")
     st.text_area("Note", key=f"call_note_{lead.gaf_id}", placeholder="What did they say?")
     # log_call saves before anything redraws; the rerun then closes this sheet and redraws the page.
     log_args = (rep_id, lead.gaf_id, lead.name, next_id)
@@ -196,6 +198,7 @@ def save_note(rep_id: int, gaf_id: str, name: str) -> None:
     status = st.session_state[f"status_{gaf_id}"]
     data.add_note(rep_id, gaf_id, status, st.session_state[f"note_{gaf_id}"])
     st.session_state[f"note_{gaf_id}"] = ""
+    st.session_state.pop(f"outcome_{gaf_id}", None)  # the call sheet's outcome starts on the new status
     group = data.status_group(status)
     if st.session_state.status_group in (group, "All"):
         st.toast(f"Saved: {name}")
@@ -317,7 +320,7 @@ def main() -> None:
     with detail_column:
         lead = data.get_lead(st.session_state.lead_id, preset)
         if show_header(lead) or st.session_state.pop("call_next", False):
-            call_sheet(rep.id, lead, next_id)
+            call_sheet(rep.id, lead, statuses[lead.gaf_id], next_id)
 
         why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"], height=355)
         with why_tab:

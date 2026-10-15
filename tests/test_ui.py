@@ -220,3 +220,14 @@ def test_j_and_k_move_down_and_up_the_table(app: AppTest) -> None:
 
     next(button for button in app.button if button.help == "Previous lead (K)").click().run()
     assert shown_lead(app) == "Alpha Roofing"
+
+
+def test_the_call_sheet_starts_on_the_leads_current_status(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+    app.segmented_control(key="status_group").set_value("All").run()
+    save_status(app, "Considering us", "Asked for a quote.")
+
+    next(button for button in app.button if button.label == "Call").click().run()
+
+    assert app.segmented_control(key="outcome_3").value == "Considering us"
