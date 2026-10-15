@@ -91,27 +91,66 @@ def show_brief(lead: data.LeadDetail) -> None:
         st.caption("Written from the GAF profile only.")
 
 
+def save_preset_choice(rep_id: int) -> None:
+    """Save the preset the rep just picked, so their next visit starts on it."""
+    data.save_preset(rep_id, st.session_state.preset)
+
+
+def save_note(rep_id: int, gaf_id: str, name: str) -> None:
+    """Save the Notes form: a note that sets the lead's status. Then say where the lead went.
+
+    It runs as the form's callback, before the page redraws, so the table already shows the save.
+    """
+    status = st.session_state[f"status_{gaf_id}"]
+    data.add_note(rep_id, gaf_id, status, st.session_state[f"note_{gaf_id}"])
+    st.session_state[f"note_{gaf_id}"] = ""
+    group = data.status_group(status)
+    if st.session_state.status_group in (group, "All"):
+        st.toast(f"Saved: {name}")
+    else:  # the lead leaves the list, so the panel moves to the top lead
+        st.toast(f"Saved: {name} is now {group}")
+
+
+def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
+    """The Notes tab: a status picker and a note box, then the history, newest first."""
+    with st.form(f"notes_{lead.gaf_id}", border=False):
+        st.segmented_control(
+            "Status", data.STATUSES, default=status, required=True, key=f"status_{lead.gaf_id}", label_visibility="collapsed"
+        )
+        st.text_area("Note", key=f"note_{lead.gaf_id}", placeholder="What happened?", height=68, label_visibility="collapsed")
+        st.form_submit_button("Save", on_click=save_note, args=(rep_id, lead.gaf_id, lead.name))
+    for note in data.lead_notes(rep_id, lead.gaf_id):
+        st.markdown(f"**{note.status}** :gray[· {note.created_at.astimezone():%b %d, %H:%M}]")
+        if note.text:
+            st.markdown(plain(note.text))
+
+
 def main() -> None:
-    """Draw the page: sidebar filters, the preset, the lead table, and the selected lead's details."""
+    """Draw the page: sidebar filters, the preset, the status filter, the lead table, and the selected lead."""
     st.set_page_config(page_title="Roofing leads", layout="wide")
     territory = data.load_territory()
     radius = float(territory["radius_miles"])
     scoring = data.load_scoring_config()
+    rep = data.current_rep()
 
+    st.sidebar.caption(f"Signed in as **{rep.name}**")
     search = st.sidebar.text_input("Search", placeholder="Name or phone")
     tiers = st.sidebar.multiselect("Tier", data.TIERS, placeholder="All tiers")
     max_miles = st.sidebar.slider("Max distance (miles)", min_value=0.0, max_value=radius, value=radius, step=0.5)
 
     title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
     with preset_column:
-        # required: a second click can't leave the page without a preset. bind: ?preset=Quick+wins deep-links.
+        # Starts on the rep's saved preset. required: a second click can't unselect it.
+        # bind: ?preset=Quick+wins in the URL deep-links to a preset.
         preset = st.segmented_control(
             "Rank by",
             list(scoring.presets),
-            default=scoring.default_preset,
+            default=rep.preset if rep.preset in scoring.presets else scoring.default_preset,
             required=True,
             key="preset",
             bind="query-params",
+            on_change=save_preset_choice,
+            args=(rep.id,),
             label_visibility="collapsed",
         )
 
@@ -119,21 +158,35 @@ def main() -> None:
     title_column.header("Roofing leads", anchor=False)
     noun = "contractor" if len(leads) == 1 else "contractors"
     st.caption(f"{len(leads)} {noun} near {territory['zip']}, within {max_miles:g} miles")
-    if not leads:
-        st.info("No contractors match. Try another search or wider filters.")
-        return
-
-    # The selected lead is remembered by id. Every run points the table's selection at that
-    # lead's current row, so a filter, a re-sort, or a preset switch never shows a different lead.
-    ids = [lead.gaf_id for lead in leads]
-    st.session_state.shown_ids = ids
-    if st.session_state.get("lead_id") not in ids:  # the first run, or the lead was filtered out
-        st.session_state.lead_id = ids[0]
-    st.session_state.lead_table = {"selection": {"rows": [ids.index(st.session_state.lead_id)], "columns": [], "cells": []}}
 
     table_column, detail_column = st.columns([5, 3])
 
     with table_column:
+        statuses = data.current_statuses(rep.id, [lead.gaf_id for lead in leads])
+        counts = {group: sum(data.status_group(statuses[lead.gaf_id]) == group for lead in leads) for group in data.STATUS_GROUPS}
+        group = st.segmented_control(
+            "Status",
+            [*data.STATUS_GROUPS, "All"],
+            default="To contact",
+            required=True,
+            key="status_group",
+            format_func=lambda option: f"{option} {counts[option]}" if option in counts else option,
+            label_visibility="collapsed",
+        )
+        leads = [lead for lead in leads if group == "All" or data.status_group(statuses[lead.gaf_id]) == group]
+        if not leads:
+            st.info("No leads here. Try another status, search, or wider filters.")
+            return
+
+        # The selected lead is remembered by id. Every run points the table's selection at that
+        # lead's current row, so a filter, a re-sort, a preset switch, or a save never shows a
+        # different lead. When the lead leaves the list, the panel moves to the top lead.
+        ids = [lead.gaf_id for lead in leads]
+        st.session_state.shown_ids = ids
+        if st.session_state.get("lead_id") not in ids:  # the first run, or the lead left the list
+            st.session_state.lead_id = ids[0]
+        st.session_state.lead_table = {"selection": {"rows": [ids.index(st.session_state.lead_id)], "columns": [], "cells": []}}
+
         st.dataframe(
             [
                 {
@@ -172,4 +225,4 @@ def main() -> None:
         with brief_tab:
             show_brief(lead)
         with notes_tab:
-            st.caption("The rep's notes and status go here.")
+            show_notes(rep.id, lead, statuses[lead.gaf_id])

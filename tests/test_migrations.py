@@ -10,7 +10,7 @@ from app.db.models import RawResponse, Rep
 
 def test_upgrade_head_creates_tables_and_seeds_a_rep(engine: Engine, session: Session) -> None:
     tables = set(inspect(engine).get_table_names())
-    assert {"runs", "contractors", "raw_responses", "reps"} <= tables
+    assert {"runs", "contractors", "raw_responses", "reps", "lead_notes"} <= tables
 
     reps = session.scalars(select(Rep)).all()
     assert len(reps) == 1

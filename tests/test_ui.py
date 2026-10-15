@@ -7,7 +7,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
-from app.db.models import Contractor, ContractorBrief, Fact, Run, Score
+from app.db.models import Contractor, ContractorBrief, Fact, Rep, Run, Score
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
@@ -140,3 +140,46 @@ def test_a_lead_with_a_brief_shows_its_opener(app: AppTest) -> None:
 
     assert app.tabs[1].label == "Brief"
     assert any("Atlantic Ave" in markdown.value for markdown in app.tabs[1].markdown)
+
+
+def save_status(app: AppTest, status: str, note: str) -> None:
+    """Fill in the Notes tab's form and save it."""
+    gaf_id = app.session_state["lead_id"]
+    app.segmented_control(key=f"status_{gaf_id}").set_value(status)
+    app.text_area(key=f"note_{gaf_id}").set_value(note)
+    app.form_submit_button[0].click().run()
+
+
+def test_the_selected_lead_survives_a_saved_status(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+    app.segmented_control(key="status_group").set_value("All").run()
+
+    save_status(app, "Contacted", "Left a voicemail.")
+
+    assert shown_lead(app) == "Gamma Roofing"
+    assert [toast.value for toast in app.toast] == ["Saved: Gamma Roofing"]
+    assert any("Left a voicemail" in markdown.value for markdown in app.tabs[2].markdown)
+
+
+def test_a_save_that_moves_the_lead_out_of_the_filter_moves_the_panel_to_the_top_lead(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()  # To contact: every lead is New
+
+    save_status(app, "Considering us", "Asked for a quote.")
+
+    assert shown_lead(app) == "Alpha Roofing"
+    assert [toast.value for toast in app.toast] == ["Saved: Gamma Roofing is now In progress"]
+    assert len(app.dataframe[0].value) == 2
+
+
+def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, session: Session) -> None:
+    app.run()
+    assert app.sidebar.caption[0].value == "Signed in as **Demo Rep**"
+
+    app.segmented_control(key="preset").set_value("Big accounts").run()
+
+    session.expire_all()
+    assert session.get(Rep, 1).preset == "Big accounts"
+    next_visit = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
+    assert next_visit.segmented_control(key="preset").value == "Big accounts"

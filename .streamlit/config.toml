@@ -1,8 +1,9 @@
 # Streamlit settings for the rep UI (streamlit run streamlit_app.py).
 
 [theme]
-# Less space above the title, so the table and the detail tabs fit one 1440x900 screen.
+# Less space above the title and below the table, so the page fits one 1440x900 screen.
 paddingTop = "0.5rem"
+paddingBottom = "1rem"
 
 # The accent color goes under each mode, never under plain [theme]: a color there pins the app to light mode.
 # A calm blue instead of the default red, which made the selected row look like an error.

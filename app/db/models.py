@@ -225,7 +225,7 @@ class ContractorBrief(Base):
 
 
 class Rep(Base):
-    """A sales rep and the territory they cover."""
+    """A sales rep, the territory they cover, and the scoring preset they last chose."""
 
     __tablename__ = "reps"
 
@@ -233,3 +233,21 @@ class Rep(Base):
     name: Mapped[str] = mapped_column(String)
     territory_zip: Mapped[str] = mapped_column(String)
     radius_miles: Mapped[float] = mapped_column(Float)
+    preset: Mapped[str | None] = mapped_column(String)  # None until the rep picks one
+
+
+class LeadNote(Base):
+    """One note a rep saved on a lead, with the status it set. Rows are only ever added.
+
+    A lead's current status, for a rep, is the status of that rep's newest row; a lead
+    with no rows is New. Reps write these through the services; the pipeline never does.
+    """
+
+    __tablename__ = "lead_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rep_id: Mapped[int] = mapped_column(ForeignKey("reps.id"), index=True)
+    contractor_id: Mapped[str] = mapped_column(ForeignKey("contractors.gaf_id"))
+    status: Mapped[str] = mapped_column(String)  # one of app.services.notes.STATUSES
+    text: Mapped[str] = mapped_column(Text)  # empty when the rep only changed the status
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
