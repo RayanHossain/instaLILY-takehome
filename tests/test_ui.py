@@ -243,3 +243,27 @@ def test_a_missing_database_shows_the_seed_command(tmp_path: Path, monkeypatch: 
     assert not app.exception
     assert "cp seed/leads.db data/leads.db" in app.error[0].value
     assert not missing.exists()  # checked before connecting, so no empty file is left behind
+
+
+def test_the_header_shows_the_founding_year_the_score_uses(app: AppTest, session: Session) -> None:
+    # GAF says 2015 and the contractor's own text says 2004: the score uses the earlier year, so the header must too.
+    session.get(Contractor, "1").in_business_since = 2015
+    session.add(
+        Fact(
+            contractor_id="1",
+            field="founded_year",
+            value="2004",
+            evidence="Family-owned since 2004.",
+            source="about_text",
+            source_url="https://www.gaf.com/en-us/roofing-contractors/1",
+            model="test",
+            prompt_version="test",
+        )
+    )
+    session.commit()
+
+    app.run()  # Alpha, the top lead, is selected
+
+    captions = [caption.value for caption in app.caption]
+    assert any("since 2004" in caption for caption in captions)
+    assert not any("since 2015" in caption for caption in captions)

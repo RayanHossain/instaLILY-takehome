@@ -112,7 +112,7 @@ def show_header(lead: data.LeadDetail) -> bool:
         parts = [
             plain(area) if area else None,
             None if lead.distance_miles is None else f"{lead.distance_miles:.1f} mi",
-            None if lead.in_business_since is None else f"since {lead.in_business_since}",
+            None if lead.founded_year is None else f"since {lead.founded_year}",
             rating,
         ]
         st.caption(" · ".join(part for part in parts if part))
