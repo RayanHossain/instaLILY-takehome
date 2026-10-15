@@ -11,9 +11,11 @@ from pydantic import BaseModel
 
 # A New York City ZIP code starts with one of these.
 NYC_ZIP_PREFIXES = ("100", "101", "102", "103", "104", "110", "111", "112", "113", "114", "116")
-# Words that would tell where the lead stands in a list. "position" is left out: a brief
-# can fairly talk about positioning a product.
-STANDING = re.compile(r"\b(rank\w*|scor(e|es|ed|ing)|top[ -]?(10|ten))\b|#\s?\d+", re.IGNORECASE)
+# Words that give away our scoring: a rank, a score, a top 10, or a score component's name.
+# "position" is left out: a brief can fairly talk about positioning a product.
+SCORING_WORDS = re.compile(
+    r"\b(rank\w*|scor(e|es|ed|ing)|top[ -]?(10|ten)|winnability|stability|value score)\b|#\s?\d+", re.IGNORECASE
+)
 # Abbreviations whose periods don't end a sentence, for counting sentences.
 ABBREVIATIONS = re.compile(r"\b(Inc|Co|Corp|Ltd|LLC|St|Ave|Rd|Dr|Mr|Mrs|Ms|Jr|Sr)\.")
 
@@ -68,7 +70,7 @@ def match_selling_points(
     if replacement:
         matched["rooftop_delivery"] = f"its services include {', '.join(replacement)}"
     if stability >= 75 and not any(flag["kind"] == "risk" for flag in flags):
-        matched["credit_terms"] = "it is a stable account with no risk flag; never the opening offer"
+        matched["credit_terms"] = "it has a good rating from enough reviews and no risk flag; never the opening offer"
     matched["introductory_pricing"] = "it fits every new account; never the opening offer"
     return matched
 
@@ -77,7 +79,8 @@ def check_brief(brief: Brief, *, fact_ids: set[int], matched_points: set[str], o
     """Raise ValueError naming every way the brief breaks a rule its Pydantic model can't express.
 
     Every cited fact and selling point must be one the lead was given; nothing may mention
-    a rank, a score, or a top 10; why_this_contractor is one or two sentences, with one to
+    a rank, a score, a top 10, or a score component (winnability, stability, value score);
+    why_this_contractor is one or two sentences, with one to
     three follow-ups and two or three questions; the first touch never offers credit terms
     or introductory pricing; and ask_for, if set, must be a known owner.
     """
@@ -88,9 +91,12 @@ def check_brief(brief: Brief, *, fact_ids: set[int], matched_points: set[str], o
     unmatched = sorted(set(brief.selling_points) - matched_points)
     if unmatched:
         problems.append(f"selling_points {unmatched} are not among the matched selling points")
-    standing = STANDING.search(brief.model_dump_json())
-    if standing:
-        problems.append(f"it says {standing.group(0)!r}: never mention a rank, a score, or a top 10")
+    scoring_word = SCORING_WORDS.search(brief.model_dump_json())
+    if scoring_word:
+        problems.append(
+            f"it says {scoring_word.group(0)!r}: never mention a rank, a score, a top 10, or a score component; "
+            "describe the evidence in plain words"
+        )
     sentences = len(re.findall(r"[.!?](\s|$)", ABBREVIATIONS.sub(r"\1", brief.why_this_contractor.strip())))
     if not 1 <= sentences <= 2:
         problems.append(f"why_this_contractor has {sentences} sentences, not one or two")

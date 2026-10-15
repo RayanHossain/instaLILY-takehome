@@ -139,17 +139,19 @@ def test_the_leads_are_the_union_of_each_presets_top_n(session: Session) -> None
     assert pick_leads(session, 2) == ["new", "mid", "big"]
 
 
-def test_a_lead_input_has_its_facts_and_selling_points_but_never_its_standing(session: Session) -> None:
+def test_a_lead_input_has_its_evidence_in_plain_words_but_never_its_scoring(session: Session) -> None:
     add_scored_contractors(session)
 
     big = lead_input(session, "big", load_selling_points())
 
+    assert "Reviews: 312 GAF reviews averaging 4.8" in big.text
+    assert "Years in business: 36 years in business (founded 1990, per the GAF profile)" in big.text
     assert 'other_trades: Siding (quote: "We also install siding")' in big.text
     assert list(big.matched) == ["one_stop_supply", "full_gaf_systems", "rooftop_delivery", "credit_terms", "introductory_pricing"]
     assert big.owners == ["Dana Reyes (Owner)"]
     assert len(big.fact_ids) == 3
-    for word in ["total", "rank", "Balanced", "Big accounts", "Quick wins"]:
-        assert word not in big.text
+    for word in ["total", "rank", "score", "value", "winnability", "stability", "stable", "balanced", "big accounts", "quick wins"]:
+        assert word not in big.text.lower()
 
 
 def test_a_rerun_makes_no_calls_and_a_weight_change_briefs_only_the_newcomer(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:

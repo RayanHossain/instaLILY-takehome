@@ -2,9 +2,10 @@
 
 The leads are the union of every preset's top N by total (N is TOP_LEADS_PER_PRESET,
 10 by default), ranked by the same list_leads the services use, so the two can't drift
-apart. Each lead's input is its name, city, tier, rating and reviews, years in business,
-facts with their ids and quotes, score reasons, and matched selling points; never its
-total, rank, or preset. A lead whose input is unchanged since its brief was written is
+apart. Each lead's input is its name, city, tier, reviews and rating, years in business,
+distance, facts with their ids and quotes, and matched selling points: the evidence
+behind its scores in plain words, never a score component's name, and never its total,
+rank, or preset. A lead whose input is unchanged since its brief was written is
 skipped, so a rerun makes no AI calls and a weight change only briefs newcomers.
 """
 
@@ -23,7 +24,7 @@ from app.db.upsert import upsert
 from app.services.leads import list_leads, tier
 from app.settings import Settings, load_selling_points
 
-PROMPT = "write_brief_v1"
+PROMPT = "write_brief_v2"  # v2 describes the evidence in plain words and never names a score component
 
 
 @dataclass
@@ -50,7 +51,12 @@ def pick_leads(session: Session, top_n: int) -> list[str]:
 
 
 def lead_input(session: Session, gaf_id: str, selling_points: dict[str, str]) -> LeadInput:
-    """Everything the brief may use about one scored lead, as text; never its total, rank, or preset."""
+    """Everything the brief may use about one scored lead, as text in plain words.
+
+    The evidence behind its scores is written as a rep would say it ("103 GAF reviews
+    averaging 5.0"), never under a score component's name, and its total, rank, and
+    preset are never given.
+    """
     contractor = session.get(Contractor, gaf_id)
     score = session.get(Score, gaf_id)
     facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id)).all()
@@ -64,22 +70,23 @@ def lead_input(session: Session, gaf_id: str, selling_points: dict[str, str]) ->
         flags=score.flags,
     )
     owners = [fact.value for fact in facts if fact.field == "owner_names"]
+    # The evidence behind its scores, in plain words; other trades come through its facts.
+    reviews = contractor.review_count or 0
+    rating = f"{reviews} GAF review{'s' if reviews != 1 else ''} averaging {contractor.rating:.1f}" if contractor.rating else "no GAF reviews yet"
     years = next(signal["input"] for signal in score.reasons["winnability"] if signal["signal"] == "years in business")
-    reviews = f"{contractor.rating:.1f} from {contractor.review_count} GAF reviews" if contractor.rating else "no GAF reviews yet"
+    distance = score.reasons["distance"][0]["input"]  # e.g. "6.1 miles from the branch"
 
     lines = [
         f"Contractor: {contractor.name}, {contractor.city}, {contractor.state}",
         f"GAF tier: {contractor_tier or 'none'}",
-        f"Rating: {reviews}",
+        f"Reviews: {rating}",
         f"Years in business: {years}",
+        f"Distance: {distance}",
         "",
         "Facts from its GAF profile and website, each with its id and the quote it comes from:"
         if facts
         else "No facts are known about this contractor beyond the lines above.",
         *[f'[{fact.id}] {fact.field}: {fact.value} (quote: "{fact.evidence}")' for fact in facts],
-        "",
-        "Why it is a lead:",
-        *[f"- {component}: {'; '.join(signal['input'] for signal in signals)}" for component, signals in score.reasons.items()],
         "",
         "Selling points that fit it (use only these):",
         *[f"- {point}: {selling_points[point]} It fits because {reason}." for point, reason in matched.items()],
