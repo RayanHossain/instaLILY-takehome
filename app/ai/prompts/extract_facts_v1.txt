@@ -1,0 +1,27 @@
+You extract facts about one roofing contractor from the text at the end. The text comes from the contractor's GAF profile (its "About text") and from the contractor's own homepage.
+
+Rules:
+1. Extract only what the text states. Do not guess, infer, or add anything you know from elsewhere.
+2. If the text says nothing about a field, give an empty list, or null for founded_year.
+3. Every item needs "evidence": an exact quote from the text that states the fact, copied character for character. Keep it short: a phrase or one sentence.
+4. Write each "value" as a short, plain label, such as "Roof replacement" or "Bergen County, NJ".
+
+Fields:
+- founded_year: the year the business started, only if the text gives the year ("in business since 2009" gives 2009). A number of years ("over 20 years") is not a year, so give null.
+- services: roofing work the contractor offers, such as roof replacement, roof repair, inspections, storm damage repair, or kinds of roofs (shingle, metal, flat, slate).
+- other_trades: work other than roofing, such as siding, gutters, windows, doors, skylights, insulation, or solar.
+- building_types: kinds of buildings the contractor works on, such as residential, commercial, industrial, or multi-family.
+- service_areas: places the contractor serves: towns, counties, regions, or states.
+- owner_names: people the text names as an owner, co-owner, founder, president, or CEO of this business, with "role" as the text states it (null if it states none). Never customers, reviewers, or other staff.
+
+Answer with JSON only, in this shape:
+{
+  "founded_year": null or {"value": <the year, as a number>, "evidence": "..."},
+  "services": [{"value": "...", "evidence": "..."}],
+  "other_trades": [{"value": "...", "evidence": "..."}],
+  "building_types": [{"value": "...", "evidence": "..."}],
+  "service_areas": [{"value": "...", "evidence": "..."}],
+  "owner_names": [{"name": "...", "role": "..." or null, "evidence": "..."}]
+}
+
+The text:

@@ -1,0 +1,25 @@
+{
+  "founded_year": null,
+  "services": [
+    {"value": "Roofing", "evidence": "a family owned and operated roofing company"},
+    {"value": "Residential roofing", "evidence": "Residential Roofing"},
+    {"value": "Commercial roofing", "evidence": "Commercial Roofing"},
+    {"value": "Metal roofing", "evidence": "Metal Roofing"}
+  ],
+  "other_trades": [
+    {"value": "Siding", "evidence": "Siding Installation & Repair"},
+    {"value": "Gutters", "evidence": "Gutter Installation & Repair"},
+    {"value": "Windows", "evidence": "Window Installation"},
+    {"value": "Solar panels", "evidence": "We also install solar panels"}
+  ],
+  "building_types": [
+    {"value": "Residential", "evidence": "we serve homeowners and businesses"},
+    {"value": "Commercial", "evidence": "we serve homeowners and businesses"}
+  ],
+  "service_areas": [
+    {"value": "North Jersey", "evidence": "over 20 years serving north jersey"},
+    {"value": "Bergen County, NJ", "evidence": "Bergen County, NJ"},
+    {"value": "Rockland County, NY", "evidence": "Rockland County,   NY"}
+  ],
+  "owner_names": []
+}

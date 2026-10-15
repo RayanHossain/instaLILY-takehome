@@ -123,6 +123,26 @@ class AiCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class Fact(Base):
+    """One fact the AI extracted about a contractor, with the exact quote it rests on.
+
+    A contractor's facts are replaced together each time the extract stage runs.
+    """
+
+    __tablename__ = "facts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contractor_id: Mapped[str] = mapped_column(ForeignKey("contractors.gaf_id"), index=True)
+    field: Mapped[str] = mapped_column(String)  # e.g. "services" or "owner_names"
+    value: Mapped[str] = mapped_column(String)  # an owner's role, when stated, follows in parentheses
+    evidence: Mapped[str] = mapped_column(Text)  # an exact quote from the source text
+    source: Mapped[str] = mapped_column(String)  # "about_text" or "homepage"
+    source_url: Mapped[str | None] = mapped_column(String)  # the GAF profile or the homepage
+    model: Mapped[str] = mapped_column(String)
+    prompt_version: Mapped[str] = mapped_column(String)  # e.g. "extract_facts_v1"
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Rep(Base):
     """A sales rep and the territory they cover."""
 
