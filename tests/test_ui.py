@@ -1,4 +1,4 @@
-"""Smoke test: the Streamlit page renders against a temporary database."""
+"""The Streamlit page, run headless against a temporary database."""
 
 from pathlib import Path
 
@@ -14,38 +14,56 @@ ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streaml
 TERRITORY = load_territory()
 
 
-def test_page_renders_the_leads_with_the_nearest_one_selected(
-    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.fixture
+def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> AppTest:
+    """The page, not yet run, on a database with three contractors: Alpha nearest, Gamma farthest."""
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
     session.flush()
     shared = {"certifications": ["GAF Master Elite® - Certification"], "first_seen_run": run.id, "last_seen_run": run.id}
-    session.add(Contractor(gaf_id="2", name="Far Roofing", lat=TERRITORY["lat"] + 0.1, lng=TERRITORY["lng"], **shared))
-    session.add(
-        Contractor(gaf_id="1", name="Near Roofing", lat=TERRITORY["lat"], lng=TERRITORY["lng"], rating=4.9, review_count=312, **shared)
-    )
+    for gaf_id, name, lat_offset in [("1", "Alpha Roofing", 0.0), ("2", "Beta Roofing", 0.05), ("3", "Gamma Roofing", 0.1)]:
+        session.add(Contractor(gaf_id=gaf_id, name=name, lat=TERRITORY["lat"] + lat_offset, lng=TERRITORY["lng"], **shared))
     session.commit()
     # Environment variables win over .env, so the app opens the test database, never data/leads.db.
     monkeypatch.setenv("DATABASE_URL", str(engine.url))
     monkeypatch.setenv("COVEO_ORG_ID", "test-org")
     monkeypatch.setenv("COVEO_API_KEY", "test-key")
+    return AppTest.from_file(str(ENTRY_POINT), default_timeout=30)
 
-    app = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
+
+def shown_lead(app: AppTest) -> str:
+    """The name in the detail panel's header."""
+    return app.subheader[0].value
+
+
+def test_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
+    app.run()
 
     assert not app.exception
-    assert app.header[0].value == f"2 contractors within {TERRITORY['radius_miles']} miles of {TERRITORY['zip']}"
-    table = app.dataframe[0].value
-    assert list(table.columns) == ["Name", "City", "Miles", "Tier", "Rating"]
-    assert table["Name"].tolist() == ["Near Roofing", "Far Roofing"]
-    assert table["Rating"][0] == "4.9 (312)"
-    assert app.subheader[0].value == "Near Roofing"  # the nearest row starts selected
-    lines = [markdown.value for markdown in app.markdown]
-    assert "**Rating:** 4.9 (312 reviews)" in lines
-    assert "**GAF Leads:** Unknown" in lines
-    assert "**Website:** —" in lines
-    assert any(line.startswith("**Notes and status:**") for line in lines)
+    assert len(app.dataframe[0].value) == 3
+    assert shown_lead(app) == "Alpha Roofing"
+    assert [tab.label for tab in app.tabs] == ["Why", "Brief", "Notes"]
 
-    app.sidebar.text_input[0].input("near").run()
 
-    assert app.header[0].value == f"1 contractor within {TERRITORY['radius_miles']} miles of {TERRITORY['zip']}"
+def test_the_selected_lead_survives_a_filter_change(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+    assert shown_lead(app) == "Gamma Roofing"
+
+    # Gamma moves from the third row to the first; the panel stays on Gamma.
+    app.sidebar.text_input[0].input("gamma").run()
+    assert shown_lead(app) == "Gamma Roofing"
+    assert app.session_state["lead_table"]["selection"]["rows"] == [0]
+
+    app.sidebar.text_input[0].input("").run()
+    assert shown_lead(app) == "Gamma Roofing"
+    assert app.session_state["lead_table"]["selection"]["rows"] == [2]
+
+
+def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+
+    app.sidebar.text_input[0].input("beta").run()
+
+    assert shown_lead(app) == "Beta Roofing"

@@ -2,7 +2,8 @@
 
 streamlit_app.py at the repo root calls main() on every rerun:
     streamlit run streamlit_app.py
-Every read goes through app/ui/data.py.
+Every read goes through app/ui/data.py. The page fits one 1440x900 laptop screen: the
+table and the detail tabs scroll on their own, so the page never does.
 """
 
 import streamlit as st
@@ -12,9 +13,11 @@ from app.ui import data
 DASH = "—"  # shown for a missing value
 
 
-def show_field(label: str, value: object) -> None:
-    """Show one "Label: value" line of the detail panel, with a dash for a missing value."""
-    st.markdown(f"**{label}:** {DASH if value is None or value == '' else value}")
+def remember_pick() -> None:
+    """Store the clicked lead's id. Row positions change with every filter, sort, and preset; ids don't."""
+    rows, ids = st.session_state.lead_table["selection"]["rows"], st.session_state.shown_ids
+    if rows and rows[0] < len(ids):
+        st.session_state.lead_id = ids[rows[0]]
 
 
 def main() -> None:
@@ -34,11 +37,18 @@ def main() -> None:
         st.info("No contractors match. Try another search or wider filters.")
         return
 
-    table_column, detail_column = st.columns([2, 1])
+    # The selected lead is remembered by id. Every run points the table's selection at that
+    # lead's current row, so a filter, a re-sort, or a save never shows a different lead.
+    ids = [lead.gaf_id for lead in leads]
+    st.session_state.shown_ids = ids
+    if st.session_state.get("lead_id") not in ids:  # the first run, or the lead was filtered out
+        st.session_state.lead_id = ids[0]
+    st.session_state.lead_table = {"selection": {"rows": [ids.index(st.session_state.lead_id)], "columns": [], "cells": []}}
+
+    table_column, detail_column = st.columns([5, 3])
 
     with table_column:
-        # Phone is left out to fit a laptop screen; it's in the detail panel, and search still matches it.
-        table = st.dataframe(
+        st.dataframe(
             [
                 {
                     "Name": lead.name,
@@ -52,33 +62,22 @@ def main() -> None:
             ],
             column_config={"Miles": st.column_config.NumberColumn(format="%.1f")},
             hide_index=True,
-            height=700,
+            height=560,
             placeholder=DASH,
-            on_select="rerun",
+            key="lead_table",
+            on_select=remember_pick,
             selection_mode="single-row-required",
         )
 
     with detail_column:
-        # Exactly one row is always selected. Its position is in the leads list,
-        # even after the rep re-sorts the table by clicking a column.
-        lead = data.get_lead(leads[table.selection.rows[0]].gaf_id)
+        lead = data.get_lead(st.session_state.lead_id)
+        st.subheader(lead.name, anchor=False)
+        st.caption(" · ".join(part for part in (lead.tier, lead.phone) if part) or DASH)
 
-        st.subheader(lead.name)
-        show_field("Address", lead.street_address)
-        show_field("Phone", lead.phone)
-        show_field("Website", None if lead.website_url is None else f"[{lead.website_url}]({lead.website_url})")
-        show_field("GAF profile", None if lead.profile_url is None else f"[View on gaf.com]({lead.profile_url})")
-        show_field("Distance", None if lead.distance_miles is None else f"{lead.distance_miles:.1f} miles")
-        show_field("Tier", lead.tier)
-        show_field("Certifications", ", ".join(lead.certifications))
-        show_field("Rating", "No reviews" if lead.rating is None else f"{lead.rating:.1f} ({lead.review_count} reviews)")
-        show_field("In business since", lead.in_business_since)
-        show_field("GAF Leads", {True: "Yes", False: "No", None: "Unknown"}[lead.enrolled_in_gaf_leads])
-        if lead.about_text:
-            st.markdown("**About**")
-            st.text(lead.about_text)  # plain text, so a "$" or "*" in it isn't read as Markdown
-
-        st.divider()
-        st.markdown("**Why this lead:** the score breakdown arrives in a later slice.")
-        st.markdown("**Brief:** the AI-written brief arrives in a later slice.")
-        st.markdown("**Notes and status:** the rep's notes and status arrive in a later slice.")
+        why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief", "Notes"], height=355)
+        with why_tab:
+            st.caption("The score breakdown goes here.")
+        with brief_tab:
+            st.caption("The AI-written brief goes here.")
+        with notes_tab:
+            st.caption("The rep's notes and status go here.")
