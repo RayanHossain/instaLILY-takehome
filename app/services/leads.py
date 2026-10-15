@@ -84,6 +84,8 @@ class LeadDetail(BaseModel):
     gaf_id: str
     name: str
     street_address: str | None
+    city: str | None
+    state: str | None
     phone: str | None
     website_url: str | None
     profile_url: str | None
@@ -271,6 +273,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
         gaf_id=contractor.gaf_id,
         name=contractor.name,
         street_address=contractor.street_address,
+        city=contractor.city,
+        state=contractor.state,
         phone=contractor.phone,
         website_url=contractor.website_url,
         profile_url=contractor.profile_url,

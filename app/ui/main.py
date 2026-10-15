@@ -39,6 +39,41 @@ def remember_pick() -> None:
         st.session_state.lead_id = ids[rows[0]]
 
 
+def show_header(lead: data.LeadDetail) -> None:
+    """The detail panel's header: the name with tier and flag badges, one caption line, the phone and links, and About."""
+    with st.container(gap="xsmall"):
+        with st.container(horizontal=True, vertical_alignment="center", gap="xsmall"):
+            st.subheader(lead.name, anchor=False, width="content")
+            if lead.tier:
+                st.badge(lead.tier, color="blue")
+            for flag in lead.score.flags if lead.score else []:
+                st.badge(flag["flag"], color="green" if flag["kind"] == "opportunity" else "red", help=flag["reason"])
+
+        area = ", ".join(part for part in (lead.city, lead.state) if part)
+        rating = "no reviews" if lead.rating is None else f"★ {lead.rating:.1f} ({lead.review_count} reviews)"
+        parts = [
+            plain(area) if area else None,
+            None if lead.distance_miles is None else f"{lead.distance_miles:.1f} mi",
+            None if lead.in_business_since is None else f"since {lead.in_business_since}",
+            rating,
+        ]
+        st.caption(" · ".join(part for part in parts if part))
+
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            if lead.phone:
+                digits = re.sub(r"\D", "", lead.phone)
+                st.markdown(f":material/call: [{plain(lead.phone)}](tel:+1{digits[-10:]})", width="content")
+            if lead.website_url:
+                st.link_button("Website", lead.website_url, icon=":material/language:")
+            if lead.profile_url:
+                st.link_button("GAF profile", lead.profile_url, icon=":material/open_in_new:")
+
+        if lead.about_text:
+            with st.expander("About"):
+                with st.container(height=150, border=False):
+                    st.markdown(plain(lead.about_text))
+
+
 def show_why(lead: data.LeadDetail, weights: data.Preset) -> None:
     """The Why tab: the total, each component as a bar with its weight, and the signals behind it."""
     if lead.score is None or lead.reasons is None:
@@ -127,16 +162,18 @@ def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
 
 def main() -> None:
     """Draw the page: sidebar filters, the preset, the status filter, the lead table, and the selected lead."""
-    st.set_page_config(page_title="Roofing leads", layout="wide")
+    st.set_page_config(page_title="Ridgeline Leads", layout="wide")
     territory = data.load_territory()
-    radius = float(territory["radius_miles"])
+    radius = int(territory["radius_miles"])
     scoring = data.load_scoring_config()
     rep = data.current_rep()
 
+    st.sidebar.subheader("Ridgeline Leads", anchor=False)
     st.sidebar.caption(f"Signed in as **{rep.name}**")
-    search = st.sidebar.text_input("Search", placeholder="Name or phone")
+    # live: the table filters as the rep types. type="search" adds a clear button.
+    search = st.sidebar.text_input("Search", placeholder="Name or phone", type="search", live=True)
     tiers = st.sidebar.multiselect("Tier", data.TIERS, placeholder="All tiers")
-    max_miles = st.sidebar.slider("Max distance (miles)", min_value=0.0, max_value=radius, value=radius, step=0.5)
+    max_miles = st.sidebar.slider("Max distance", min_value=1, max_value=radius, value=radius, format="%d mi")
 
     title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
     with preset_column:
@@ -157,7 +194,7 @@ def main() -> None:
     leads = data.list_leads(search, tiers, max_miles, preset)
     title_column.header("Roofing leads", anchor=False)
     noun = "contractor" if len(leads) == 1 else "contractors"
-    st.caption(f"{len(leads)} {noun} near {territory['zip']}, within {max_miles:g} miles")
+    st.caption(f"{len(leads)} {noun} near {territory['zip']}, within {max_miles} miles")
 
     table_column, detail_column = st.columns([5, 3])
 
@@ -216,8 +253,7 @@ def main() -> None:
 
     with detail_column:
         lead = data.get_lead(st.session_state.lead_id, preset)
-        st.subheader(lead.name, anchor=False)
-        st.caption(" · ".join(part for part in (lead.tier, lead.phone) if part) or DASH)
+        show_header(lead)
 
         why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"], height=355)
         with why_tab:

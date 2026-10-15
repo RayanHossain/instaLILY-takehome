@@ -19,7 +19,7 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
     """The page, not yet run, on a database with three scored contractors.
 
     Balanced ranks them Alpha, Beta, Gamma; Quick wins ranks them Beta, Gamma, Alpha.
-    Alpha has a brief; Gamma has none, but has one fact.
+    Alpha has a brief; Gamma has none, but has one fact and the only website.
     """
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
@@ -27,6 +27,9 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
     shared = {"certifications": ["GAF Master Elite® - Certification"], "first_seen_run": run.id, "last_seen_run": run.id}
     for gaf_id, name, lat_offset in [("1", "Alpha Roofing", 0.0), ("2", "Beta Roofing", 0.05), ("3", "Gamma Roofing", 0.1)]:
         session.add(Contractor(gaf_id=gaf_id, name=name, lat=TERRITORY["lat"] + lat_offset, lng=TERRITORY["lng"], **shared))
+    session.get(Contractor, "3").website_url = "https://gamma.example"
+    for contractor in session.query(Contractor):
+        contractor.profile_url = f"https://www.gaf.com/en-us/roofing-contractors/{contractor.gaf_id}"
     session.flush()
     for gaf_id, value, winnability, distance in [("1", 90, 20, 100), ("2", 20, 95, 80), ("3", 60, 60, 60)]:
         session.add(
@@ -72,7 +75,7 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
 
 def shown_lead(app: AppTest) -> str:
     """The name in the detail panel's header."""
-    return app.subheader[0].value
+    return app.main.subheader[0].value
 
 
 def test_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
@@ -183,3 +186,12 @@ def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, s
     assert session.get(Rep, 1).preset == "Big accounts"
     next_visit = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
     assert next_visit.segmented_control(key="preset").value == "Big accounts"
+
+
+def test_the_header_links_the_website_only_when_there_is_one(app: AppTest) -> None:
+    app.run()  # Alpha: no website
+    assert [button.label for button in app.main.get("link_button")] == ["GAF profile"]
+
+    app.session_state["lead_id"] = "3"
+    app.run()  # Gamma
+    assert [button.label for button in app.main.get("link_button")] == ["Website", "GAF profile"]
