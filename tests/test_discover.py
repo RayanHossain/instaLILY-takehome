@@ -47,6 +47,7 @@ def test_second_run_adds_no_duplicates_and_moves_last_seen_run(session: Session,
     raw_responses = session.scalars(select(RawResponse)).all()
     assert [r.run_id for r in raw_responses] == [first.id, second.id]
     assert raw_responses[0].body == FIXTURE.read_bytes().decode()
+    assert raw_responses[0].status_code == 200
     assert raw_responses[0].request_body["firstResult"] == 0  # the page offset is saved with the page
 
 

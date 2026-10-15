@@ -49,6 +49,7 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
                     run_id=run.id,
                     source="coveo",
                     url=str(response.url),
+                    status_code=response.status_code,
                     content_type=response.headers.get("content-type"),
                     request_body=json.loads(response.request.content),  # holds firstResult, the page offset
                     body=response.text,

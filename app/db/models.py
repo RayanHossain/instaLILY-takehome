@@ -73,6 +73,8 @@ class RawResponse(Base):
     source: Mapped[str] = mapped_column(String)
     url: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    # The HTTP status. Only 200s are parsed; other statuses are kept as a record of the failure.
+    status_code: Mapped[int | None] = mapped_column(Integer)
     content_type: Mapped[str | None] = mapped_column(String)
     # The JSON body we sent, for POST requests like a search page (its offset is in here).
     # Must never hold secrets; credentials go in headers, which are not saved.

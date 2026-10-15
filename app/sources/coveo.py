@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from app.sources import USER_AGENT
+
 SEARCH_PIPELINE = "prod-gaf-recommended-residential-contractors"
 PAGE_SIZE = 100
 
@@ -84,7 +86,7 @@ def fetch_pages(
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
-        "User-Agent": "instaLILY-takehome-lead-research/0.1 (roofing distributor sales-intelligence prototype)",
+        "User-Agent": USER_AGENT,
     }
 
     first_result = 0
