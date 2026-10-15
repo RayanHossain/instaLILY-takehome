@@ -103,6 +103,26 @@ class RawResponse(Base):
     content_hash: Mapped[str] = mapped_column(String(64))  # sha256 hex digest of body
 
 
+class AiCache(Base):
+    """One answer from an AI model, saved before it is parsed.
+
+    An answer that passed validation is reused: the next request with the same
+    cache_key gets the newest valid answer without calling the model.
+    """
+
+    __tablename__ = "ai_cache"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # sha256 hex digest of the model, the prompt (its name carries its version), and the input.
+    cache_key: Mapped[str] = mapped_column(String(64), index=True)
+    model: Mapped[str] = mapped_column(String)
+    prompt_name: Mapped[str] = mapped_column(String)  # e.g. "extract_facts_v1"
+    response: Mapped[str] = mapped_column(Text)  # the answer exactly as received
+    valid: Mapped[bool] = mapped_column(Boolean, default=False)  # True once it passed validation
+    error: Mapped[str | None] = mapped_column(Text)  # why it failed validation
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Rep(Base):
     """A sales rep and the territory they cover."""
 

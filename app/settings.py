@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import SecretStr
+from pydantic import PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     coveo_api_key: SecretStr
     # Optional, so the UI runs without one: only the AI stages need it, and app/ai says so.
     gemini_api_key: SecretStr | None = None
+    # The model every AI call uses, and the most requests to send it per minute.
+    gemini_model: str = "gemma-4-26b-a4b-it"
+    gemini_requests_per_minute: PositiveInt = 10
 
 
 def load_territory() -> dict[str, Any]:
