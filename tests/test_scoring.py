@@ -112,33 +112,23 @@ def test_score_contractor_records_where_the_founding_year_came_from() -> None:
         tier="Master Elite",
         other_trades=["Siding"],
         founded_year=2025,
-        founded_from="its extracted facts",
+        founded_from="the GAF profile",
         distance_miles=5.0,
         radius_miles=25,
         current_year=2026,
     )
 
     assert (scored["value"], scored["winnability"], scored["stability"], scored["distance"]) == (86.5, 75, 90, 80)
-    assert scored["reasons"]["winnability"][0]["founded_from"] == "its extracted facts"
+    assert scored["reasons"]["winnability"][0]["founded_from"] == "the GAF profile"
     assert scored["flags"] == [{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}]
     assert scored["rules_version"] == CONFIG.rules_version
 
 
-@pytest.mark.parametrize(
-    ("gaf_year", "extracted_year", "expected"),
-    [
-        (2009, None, (2009, "the GAF profile")),
-        (None, 2004, (2004, "its extracted facts")),
-        (2015, 2004, (2004, "its extracted facts")),  # GAF's year is later, perhaps when it joined GAF
-        (1984, 1995, (1984, "the GAF profile")),
-        (1990, 1990, (1990, "the GAF profile and its extracted facts")),
-        (None, None, (None, None)),
-    ],
-)
-def test_the_founding_year_is_the_earliest_either_source_gives(
-    gaf_year: int | None, extracted_year: int | None, expected: tuple[int | None, str | None]
+@pytest.mark.parametrize(("gaf_year", "expected"), [(2009, (2009, "the GAF profile")), (None, (None, None))])
+def test_the_founding_year_is_gafs_in_business_since_only(
+    gaf_year: int | None, expected: tuple[int | None, str | None]
 ) -> None:
-    assert founding_year(gaf_year, extracted_year) == expected
+    assert founding_year(gaf_year) == expected
 
 
 def test_a_preset_whose_weights_dont_add_up_to_100_fails_to_load() -> None:

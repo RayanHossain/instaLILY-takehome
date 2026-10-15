@@ -33,7 +33,8 @@ def add_fact(session: Session, contractor_id: str, field: str, value: str, evide
 def add_contractors(session: Session) -> None:
     """A big established account 20 miles out, a new business at the branch, and one from an older discover.
 
-    "big" gives its founding year on its GAF profile; "new" only in its extracted facts.
+    Both give their founding year on their GAF profile. "new" also has an earlier extracted
+    founding year, which the rules ignore: only GAF's year scores.
     """
     old_run, latest_run = Run(territory_zip="10013", radius_miles=25), Run(territory_zip="10013", radius_miles=25)
     session.add_all([old_run, latest_run])
@@ -52,6 +53,7 @@ def add_contractors(session: Session) -> None:
         "certifications": ["GAF Certified Plus™ - Certification"],
         "review_count": 3,
         "rating": 5.0,
+        "in_business_since": 2025,
         "lat": TERRITORY["lat"],
         "lng": TERRITORY["lng"],
     }
@@ -64,7 +66,7 @@ def add_contractors(session: Session) -> None:
     )
     session.flush()
     add_fact(session, "big", "other_trades", "Siding", "We also install siding")
-    add_fact(session, "new", "founded_year", "2025", "Founded in 2025")
+    add_fact(session, "new", "founded_year", "2020", "Founded in 2020")
     session.commit()
 
 
@@ -78,8 +80,8 @@ def test_score_scores_the_latest_discover_and_a_rerun_changes_nothing(session: S
     assert (scores["big"].value, scores["big"].winnability, scores["big"].stability) == (91.0, 30.0, 90.0)
     assert (scores["new"].value, scores["new"].winnability, scores["new"].stability, scores["new"].distance) == (53.0, 90.0, 50.0, 100.0)
     years = {contractor_id: row.reasons["winnability"][0] for contractor_id, row in scores.items()}
-    assert (years["big"]["founded_from"], years["new"]["founded_from"]) == ("the GAF profile", "its extracted facts")
-    assert years["new"]["input"] == "1 year in business (founded 2025, per its extracted facts)"
+    assert (years["big"]["founded_from"], years["new"]["founded_from"]) == ("the GAF profile", "the GAF profile")
+    assert years["new"]["input"] == "1 year in business (founded 2025, per the GAF profile)"
     assert scores["new"].flags == [{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}]
     assert scores["big"].flags == []
     before = {row.contractor_id: (row.value, row.winnability, row.stability, row.distance, row.flags, row.reasons) for row in scores.values()}
@@ -89,6 +91,18 @@ def test_score_scores_the_latest_discover_and_a_rerun_changes_nothing(session: S
 
     after = {row.contractor_id: (row.value, row.winnability, row.stability, row.distance, row.flags, row.reasons) for row in session.scalars(select(Score))}
     assert after == before
+
+
+def test_an_extracted_founding_year_never_fills_in_for_a_missing_gaf_year(session: Session) -> None:
+    add_contractors(session)
+    session.get(Contractor, "new").in_business_since = None  # only the extracted "Founded in 2020" is left
+    session.commit()
+
+    score(session, YEAR)
+
+    years = session.get(Score, "new").reasons["winnability"][0]
+    assert (years["input"], years["points"], years["guess"]) == ("founding year unknown", 50, True)
+    assert session.get(Score, "new").flags == []
 
 
 def test_presets_rank_the_same_contractors_differently(session: Session) -> None:

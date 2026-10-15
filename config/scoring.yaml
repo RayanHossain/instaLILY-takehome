@@ -1,6 +1,6 @@
 # Scoring rules for the score stage: every number the rules use, loaded and checked by app/scoring.py.
 # Bump rules_version whenever a number changes, so each stored score says which rules made it.
-rules_version: "2"  # 2: the earliest founding year either source gives; "New business" under 3 years
+rules_version: "3"  # 3: the founding year is GAF's "In business since" only; extracted years no longer score
 
 # A signal with no data scores this, so missing data is neutral.
 missing_points: 50

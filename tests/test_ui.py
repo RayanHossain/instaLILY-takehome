@@ -246,7 +246,7 @@ def test_a_missing_database_shows_the_seed_command(tmp_path: Path, monkeypatch: 
 
 
 def test_the_header_shows_the_founding_year_the_score_uses(app: AppTest, session: Session) -> None:
-    # GAF says 2015 and the contractor's own text says 2004: the score uses the earlier year, so the header must too.
+    # GAF says 2015 and the contractor's own text says 2004: the score uses only GAF's year, so the header must too.
     session.get(Contractor, "1").in_business_since = 2015
     session.add(
         Fact(
@@ -265,5 +265,5 @@ def test_the_header_shows_the_founding_year_the_score_uses(app: AppTest, session
     app.run()  # Alpha, the top lead, is selected
 
     captions = [caption.value for caption in app.caption]
-    assert any("since 2004" in caption for caption in captions)
-    assert not any("since 2015" in caption for caption in captions)
+    assert any("since 2015" in caption for caption in captions)
+    assert not any("since 2004" in caption for caption in captions)

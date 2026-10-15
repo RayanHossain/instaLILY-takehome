@@ -20,8 +20,8 @@ from app.settings import load_territory
 def score(session: Session, current_year: int) -> int:
     """Score every contractor in the latest discover, and upsert its row in scores.
 
-    The founding year is the earliest the GAF profile and the extracted facts give; the
-    reasons record which source it came from.
+    The founding year is GAF's "In business since" only (scoring.founding_year); an
+    extracted founding year never fills in for a missing one.
 
     Args:
         session: An open session. All rows are committed together.
@@ -39,20 +39,14 @@ def score(session: Session, current_year: int) -> int:
         select(Contractor).where(Contractor.last_seen_run == latest_run).order_by(Contractor.gaf_id)
     ).all()
 
-    # The facts the rules use: other trades, and the founding year the contractor's own text gives.
+    # The facts the rules use: other trades only. Extracted founding years stay facts, but don't score.
     other_trades: defaultdict[str, set[str]] = defaultdict(set)
-    founded_facts: dict[str, int] = {}
-    for contractor_id, field, value in session.execute(
-        select(Fact.contractor_id, Fact.field, Fact.value).where(Fact.field.in_(["other_trades", "founded_year"]))
-    ):
-        if field == "other_trades":
-            other_trades[contractor_id].add(value)
-        else:
-            founded_facts[contractor_id] = int(value)
+    for contractor_id, value in session.execute(select(Fact.contractor_id, Fact.value).where(Fact.field == "other_trades")):
+        other_trades[contractor_id].add(value)
 
     rows = []
     for contractor in contractors:
-        founded_year, founded_from = scoring.founding_year(contractor.in_business_since, founded_facts.get(contractor.gaf_id))
+        founded_year, founded_from = scoring.founding_year(contractor.in_business_since)
         scored = scoring.score_contractor(
             config,
             review_count=contractor.review_count,

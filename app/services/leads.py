@@ -94,7 +94,7 @@ class LeadDetail(BaseModel):
     certifications: list[str]
     rating: float | None
     review_count: int | None
-    # The year the score uses: the earlier of GAF's "In business since" and its extracted facts' year.
+    # The year the score uses: GAF's "In business since" (scoring.founding_year).
     founded_year: int | None
     enrolled_in_gaf_leads: bool | None
     about_text: str | None
@@ -268,9 +268,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
     score = session.get(Score, gaf_id)
     stored_brief = session.get(ContractorBrief, gaf_id)
     in_a_top = any(gaf_id in ids for ids in top_leads(session, top_n).values())
-    facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id)).all()
-    extracted_year = next((int(fact.value) for fact in facts if fact.field == "founded_year"), None)
-    founded_year, _ = scoring.founding_year(contractor.in_business_since, extracted_year)
+    facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id))
+    founded_year, _ = scoring.founding_year(contractor.in_business_since)
 
     return LeadDetail(
         gaf_id=contractor.gaf_id,

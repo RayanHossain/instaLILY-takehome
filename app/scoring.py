@@ -119,25 +119,19 @@ def load_scoring_config() -> ScoringConfig:
     return ScoringConfig.model_validate(yaml.safe_load(Path("config/scoring.yaml").read_text()))
 
 
-def founding_year(gaf_year: int | None, extracted_year: int | None) -> tuple[int | None, str | None]:
-    """The earliest founding year either source gives, and where it came from.
+def founding_year(gaf_year: int | None) -> tuple[int | None, str | None]:
+    """The founding year the rules use, and where it came from: GAF's "In business since" only.
 
-    Where the two disagree, GAF's "In business since" is usually the later one, perhaps
-    the year the contractor joined GAF, so the earlier year wins.
+    Contractors submit documents to GAF to get certified, so GAF's year is the checked one;
+    a year on their own website or in their About text is easier to inflate. Extracted
+    founding years stay facts with their quotes, but never feed the score.
 
     Returns:
-        (year, source): source is "the GAF profile", "its extracted facts", or both joined
-        with "and" when they give the same year. (None, None) when neither gives a year.
+        (year, "the GAF profile"), or (None, None) when GAF gives no year.
     """
-    given = {
-        source: year
-        for source, year in [("the GAF profile", gaf_year), ("its extracted facts", extracted_year)]
-        if year is not None
-    }
-    if not given:
+    if gaf_year is None:
         return None, None
-    earliest = min(given.values())
-    return earliest, " and ".join(source for source, year in given.items() if year == earliest)
+    return gaf_year, "the GAF profile"
 
 
 def score_contractor(
