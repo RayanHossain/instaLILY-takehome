@@ -147,7 +147,7 @@ def extract(session: Session, settings: Settings) -> int:
     print(
         f"extract: {settings.gemini_model}: {stats.calls} AI calls, "
         f"{stats.seconds / stats.calls if stats.calls else 0:.1f} s each on average, {stats.cache_hits} cache hits, "
-        f"{stats.invalid} invalid answers, {stats.rate_limited} 429s, {stats.unavailable} 503s, {stats.timeouts} timeouts"
+        f"{stats.invalid} invalid answers, HTTP errors retried {dict(stats.http_errors)}, {stats.timeouts} timeouts"
     )
     return stored
 

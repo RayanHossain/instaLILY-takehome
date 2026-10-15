@@ -34,6 +34,10 @@ RATE_LIMITED = (
     },
 )
 UNAVAILABLE = (503, {"error": {"code": 503, "message": "The model is overloaded.", "status": "UNAVAILABLE"}})
+DEADLINE_EXCEEDED = (
+    504,
+    {"error": {"code": 504, "message": "Deadline expired before operation could complete.", "status": "DEADLINE_EXCEEDED"}},
+)
 
 
 class Company(BaseModel):
@@ -92,6 +96,7 @@ def test_invalid_answer_is_retried_once_with_the_error(session: Session, clock: 
     result = client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=fake_gemini(replies, requests))
 
     assert result == Company(name="Acme Roofing", founded_year=1999)
+    assert json.loads(requests[0].content)["generationConfig"]["maxOutputTokens"] == 2048  # a runaway answer is cut off
     saved = session.scalars(select(AiCache).order_by(AiCache.id)).all()
     assert [(row.valid, row.error is None) for row in saved] == [(False, False), (True, True)]  # both kept
     retry = json.loads(requests[1].content)["contents"]
@@ -134,9 +139,10 @@ def test_cache_hit_makes_no_call(session: Session) -> None:
     [
         (RATE_LIMITED, [7.0, 7.0, 7.0]),  # the 429 says to wait 7 s, so that is the pause
         (UNAVAILABLE, [15, 30, 60]),  # a 503 suggests nothing, so the default pauses apply
+        (DEADLINE_EXCEEDED, [15, 30, 60]),
     ],
 )
-def test_429_or_503_stops_the_stage_cleanly_after_four_tries(
+def test_retryable_error_stops_the_stage_cleanly_after_four_tries(
     session: Session, clock: FakeClock, reply: tuple[int, dict[str, Any]], pauses: list[float]
 ) -> None:
     requests: list[httpx.Request] = []
@@ -145,6 +151,7 @@ def test_429_or_503_stops_the_stage_cleanly_after_four_tries(
         client.generate(session, SETTINGS, PROMPT, INPUT, Company, transport=fake_gemini([reply], requests))
 
     assert len(requests) == 4
+    assert client.stats.http_errors == {reply[0]: 4}
     assert clock.pauses == pauses
     assert session.scalars(select(AiCache)).all() == []  # nothing came back, so nothing was saved
 

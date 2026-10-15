@@ -8,7 +8,8 @@ makes no calls. Prompts are versioned text files in app/ai/prompts/.
 
 import hashlib
 import time
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
 
@@ -24,7 +25,12 @@ from app.settings import Settings
 
 PROMPTS = Path(__file__).parent / "prompts"
 TIMEOUT_SECONDS = 120  # the SDK sets no timeout of its own, so a stuck request would wait forever
-# Pauses after a 429, a 503, or a timeout before trying again, when the error suggests none.
+# Real answers are under 1,000 tokens. The cap ends a runaway answer (a model stuck repeating
+# itself) within a minute, as cut-off JSON that fails validation and gets the one retry.
+MAX_OUTPUT_TOKENS = 2048
+# HTTP errors worth trying again: the set the google-genai SDK itself retries by default.
+RETRY_CODES = {408, 429, 500, 502, 503, 504}
+# Pauses before trying again after one of those errors or a timeout, when the error suggests none.
 RETRY_PAUSES = [15, 30, 60]
 
 Output = TypeVar("Output", bound=BaseModel)
@@ -39,8 +45,7 @@ class Stats:
     cache_hits: int = 0
     invalid: int = 0  # answers that failed validation
     failed: int = 0  # inputs given up on, still invalid after the retry
-    rate_limited: int = 0  # 429s
-    unavailable: int = 0  # 503s
+    http_errors: Counter[int] = field(default_factory=Counter)  # retried errors by status code, e.g. {503: 2}
     timeouts: int = 0
 
 
@@ -78,7 +83,7 @@ def generate(
         The validated answer, or None if it was still invalid after the retry.
 
     Raises:
-        SystemExit: GEMINI_API_KEY isn't set, or the API kept answering 429, 503, or nothing.
+        SystemExit: GEMINI_API_KEY isn't set, or the API kept failing with an error worth retrying.
     """
     cache_key = hashlib.sha256(f"{settings.gemini_model}\n{prompt_name}\n{input_text}".encode()).hexdigest()
     cached = session.scalar(
@@ -95,7 +100,9 @@ def generate(
         raise SystemExit("GEMINI_API_KEY is not set. Put a Gemini API key in .env to run the AI stages.")
     prompt = (PROMPTS / f"{prompt_name}.txt").read_text(encoding="utf-8")
     contents: list[types.Content] = [types.UserContent(parts=[types.Part.from_text(text=f"{prompt}\n\n{input_text}")])]
-    config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=output_model)
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json", response_schema=output_model, max_output_tokens=MAX_OUTPUT_TOKENS
+    )
     http_options = types.HttpOptions(
         timeout=TIMEOUT_SECONDS * 1000,  # milliseconds
         httpx_client=httpx.Client(transport=transport) if transport else None,
@@ -134,9 +141,9 @@ def _ask(
 ) -> str:
     """Send one request, paced, and return the text of the answer.
 
-    A 429, a 503, or no answer within the timeout is tried again after a pause: the one
-    the error suggests, if it suggests one. After four tries in all, the stage stops
-    cleanly, and a rerun picks up from the cache.
+    An error in RETRY_CODES (a 429, a 503, ...) or no answer within the timeout is tried
+    again after a pause: the one the error suggests, if it suggests one. After four tries
+    in all, the stage stops cleanly, and a rerun picks up from the cache.
     """
     global _last_request_at
     tries = 0
@@ -150,12 +157,9 @@ def _ask(
         try:
             response = client.models.generate_content(model=settings.gemini_model, contents=contents, config=config)
         except errors.APIError as error:
-            if error.code not in (429, 503):
+            if error.code not in RETRY_CODES:
                 raise
-            if error.code == 429:
-                stats.rate_limited += 1
-            else:
-                stats.unavailable += 1
+            stats.http_errors[error.code] += 1
             problem = f"HTTP {error.code}"
             # A 429 can say how long to wait: {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "37s"}.
             details = error.details.get("error", {}).get("details", []) if isinstance(error.details, dict) else []
