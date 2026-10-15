@@ -18,7 +18,7 @@ from typing import TypeVar
 import httpx
 from google import genai
 from google.genai import errors, types
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,7 @@ def generate(
     *,
     run: StageRun,
     contractor_id: str | None = None,
+    check: Callable[[Output], None] | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> Output | None:
     """Ask the model the prompt about input_text, and return its answer as an output_model.
@@ -73,6 +74,9 @@ def generate(
             response schema, which steers Gemma but doesn't bind it: hence the validation.
         run: The stage run asking. Each ai_calls row belongs to it.
         contractor_id: The contractor the input is about, if any, for the ai_calls rows.
+        check: Checks a validated answer for what its Pydantic model can't express, raising
+            ValueError naming each problem. A failed check counts as an invalid answer: it
+            gets the retry, with the problems shown to the model.
         transport: Tests pass an httpx.MockTransport; None uses the real network.
 
     Returns:
@@ -144,7 +148,9 @@ def generate(
             session.commit()  # saved before it is parsed
             try:
                 result = output_model.model_validate_json(_strip_code_fence(answer))
-            except ValidationError as error:
+                if check:
+                    check(result)
+            except ValueError as error:  # a Pydantic ValidationError is a ValueError too
                 saved.error = str(error)
                 log("invalid", seconds=seconds, usage=response.usage_metadata, error=str(error))
                 # The retry shows the model its answer and what was wrong with it.

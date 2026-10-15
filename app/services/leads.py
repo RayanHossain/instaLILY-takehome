@@ -14,7 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import scoring
-from app.db.models import Contractor, Score
+from app.briefs import Brief
+from app.db.models import Contractor, ContractorBrief, Score
 from app.settings import load_territory
 
 # GAF's contractor tiers, highest first.
@@ -70,6 +71,7 @@ class LeadDetail(BaseModel):
     about_text: str | None
     score: LeadScore | None
     reasons: dict[str, list[dict[str, Any]]] | None  # each component's signals; None until scored
+    brief: Brief | None  # its latest brief, written while it was in a preset's top N
 
 
 def tier(certifications: list[str]) -> str | None:
@@ -175,7 +177,7 @@ def list_leads(
 
 
 def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDetail:
-    """Return the details of one contractor, with its scores under the preset and their reasons.
+    """Return the details of one contractor: its scores under the preset, their reasons, and its brief.
 
     Raises:
         LookupError: No contractor has this GAF ID.
@@ -186,6 +188,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         raise LookupError(f"No contractor with GAF ID {gaf_id}")
     preset_name, weights = _preset(preset)
     score = session.get(Score, gaf_id)
+    stored_brief = session.get(ContractorBrief, gaf_id)
 
     return LeadDetail(
         gaf_id=contractor.gaf_id,
@@ -204,6 +207,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         about_text=contractor.about_text,
         score=_lead_score(score, preset_name, weights),
         reasons=score.reasons if score else None,
+        brief=Brief.model_validate(stored_brief.content) if stored_brief else None,
     )
 
 

@@ -202,6 +202,23 @@ class Score(Base):
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class ContractorBrief(Base):
+    """A contractor's latest brief: the AI's touch plan, written for a lead in a preset's top N.
+
+    input_hash covers everything the AI was told; a brief whose input, model, and prompt
+    version are unchanged is never written again.
+    """
+
+    __tablename__ = "briefs"
+
+    contractor_id: Mapped[str] = mapped_column(ForeignKey("contractors.gaf_id"), primary_key=True)
+    content: Mapped[dict[str, Any]] = mapped_column(JSON)  # the validated app.briefs.Brief, as a dict
+    input_hash: Mapped[str] = mapped_column(String(64))  # sha256 hex digest of the input text
+    model: Mapped[str] = mapped_column(String)
+    prompt_version: Mapped[str] = mapped_column(String)  # e.g. "write_brief_v1"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Rep(Base):
     """A sales rep and the territory they cover."""
 

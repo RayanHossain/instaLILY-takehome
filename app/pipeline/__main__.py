@@ -4,7 +4,7 @@ Usage (from the repo root):
     python -m app.pipeline run --stages discover
     python -m app.pipeline run --stages fetch,parse,check_websites
     python -m app.pipeline run --stages capture_websites,extract
-    python -m app.pipeline run --stages score
+    python -m app.pipeline run --stages score,brief
     python -m app.pipeline stats
 """
 
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
 from app.db.models import StageRun, utc_now
+from app.pipeline.brief import brief
 from app.pipeline.capture_websites import capture_websites
 from app.pipeline.check_websites import check_websites
 from app.pipeline.discover import discover
@@ -24,7 +25,7 @@ from app.pipeline.parse import parse
 from app.pipeline.score import score
 from app.settings import Settings, load_territory
 
-STAGES = ["discover", "fetch", "parse", "check_websites", "capture_websites", "extract", "score"]
+STAGES = ["discover", "fetch", "parse", "check_websites", "capture_websites", "extract", "score", "brief"]
 
 
 def main() -> None:
@@ -66,6 +67,8 @@ def main() -> None:
                 extract(session, settings)
             elif stage == "score":
                 score(session, current_year=utc_now().year)
+            elif stage == "brief":
+                brief(session, settings)
 
 
 def show_stats(session: Session) -> None:
