@@ -1,5 +1,5 @@
 """Application settings: values from the .env file (environment variables win), and the
-territory from config/distributor.yaml."""
+territory and selling points from config/distributor.yaml."""
 
 from pathlib import Path
 from typing import Any
@@ -27,8 +27,16 @@ class Settings(BaseSettings):
     # valid answers for 10 of 10 sample contractors; 26B A4B looped on 4 of them.
     gemini_model: str = "gemma-4-31b-it"
     gemini_requests_per_minute: PositiveInt = 10
+    # How many leads each scoring preset contributes to the brief stage: its top N by total.
+    top_leads_per_preset: PositiveInt = 10
 
 
 def load_territory() -> dict[str, Any]:
     """Read the territory (zip, lat, lng, radius_miles) from config/distributor.yaml."""
     return yaml.safe_load(Path("config/distributor.yaml").read_text())["territory"]
+
+
+def load_selling_points() -> dict[str, str]:
+    """Read the selling points from config/distributor.yaml: id -> its one-line description."""
+    points = yaml.safe_load(Path("config/distributor.yaml").read_text())["selling_points"]
+    return {point["id"]: point["description"] for point in points}

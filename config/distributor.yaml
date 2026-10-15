@@ -1,9 +1,23 @@
 # Distributor configuration.
 # The territory is the branch the pipeline searches around.
-# Selling points for AI outreach will be added in a later slice.
+# The selling points are what a brief can offer; rules in app/briefs.py pick the ones that fit each lead.
 
 territory:
   zip: "10013"          # quoted so leading zeros survive
   lat: 40.7217861
   lng: -74.0094471
   radius_miles: 25
+
+selling_points:
+  - id: introductory_pricing
+    description: Introductory pricing on a new account's first orders.
+  - id: credit_terms
+    description: Trade credit terms for an established account.
+  - id: rooftop_delivery
+    description: Rooftop delivery, so materials land where the crew works.
+  - id: delivery_windows
+    description: Scheduled delivery windows, for jobs on tight city streets.
+  - id: full_gaf_systems
+    description: Full GAF roofing systems in stock, from underlayment to ridge caps.
+  - id: one_stop_supply
+    description: One-stop supply for other trades, such as siding, gutters, and windows.
