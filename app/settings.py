@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     database_url: str
     coveo_org_id: str
     # SecretStr prints as '**********', so the keys stay out of reprs and logs.
-    coveo_api_key: SecretStr
+    # Optional, so the UI and the other stages run without one: only discover needs it, and says so.
+    coveo_api_key: SecretStr | None = None
     # Optional, so the UI runs without one: only the AI stages need it, and app/ai says so.
     gemini_api_key: SecretStr | None = None
     # The model every AI call uses, and the most requests to send it per minute. 31B gave

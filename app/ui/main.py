@@ -223,6 +223,9 @@ def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
 def main() -> None:
     """Draw the page: sidebar filters, the preset, the status filter, the lead table, and the selected lead."""
     st.set_page_config(page_title="Ridgeline Leads", layout="wide")
+    if data.database_missing():
+        st.error("No database yet. From the repo root, run: `mkdir -p data && cp seed/leads.db data/leads.db`")
+        st.stop()
     territory = data.load_territory()
     radius = int(territory["radius_miles"])
     scoring = data.load_scoring_config()

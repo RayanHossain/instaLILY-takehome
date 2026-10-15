@@ -28,7 +28,12 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
     Returns:
         The closed run, with status "finished" and the number of contractors seen.
         If anything fails, the run is closed as "failed" and the error is re-raised.
+        Without a Coveo key it exits before opening a run.
     """
+    # .env.example ships "replace-me", so a copied placeholder counts as no key.
+    if not settings.coveo_api_key or settings.coveo_api_key.get_secret_value() == "replace-me":
+        raise SystemExit("COVEO_API_KEY is not set. Put a Coveo API key in .env to run discover.")
+
     run = Run(territory_zip=territory["zip"], radius_miles=territory["radius_miles"])
     session.add(run)
     session.commit()
@@ -37,7 +42,7 @@ def discover(session: Session, territory: dict[str, Any], settings: Settings) ->
     try:
         pages = coveo.fetch_pages(
             settings.coveo_org_id,
-            settings.coveo_api_key.get_secret_value(),
+            settings.coveo_api_key.get_secret_value(),  # checked above
             territory["lat"],
             territory["lng"],
             territory["radius_miles"],

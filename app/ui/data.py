@@ -5,8 +5,10 @@ makes goes through a service. Writes touch only the rep's own data: notes, statu
 and their chosen preset.
 """
 
+from pathlib import Path
+
 import streamlit as st
-from sqlalchemy import Engine
+from sqlalchemy import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
@@ -32,6 +34,7 @@ __all__ = [
     "add_note",
     "current_rep",
     "current_statuses",
+    "database_missing",
     "get_lead",
     "lead_notes",
     "list_leads",
@@ -54,6 +57,15 @@ def _engine(database_url: str) -> Engine:
 def _open_session() -> Session:
     """Open a session on the database DATABASE_URL names (the environment wins over .env)."""
     return Session(_engine(Settings().database_url))
+
+
+def database_missing() -> bool:
+    """True when DATABASE_URL names a SQLite file that doesn't exist yet, as in a fresh clone.
+
+    Checked before connecting, because connecting would create an empty file.
+    """
+    url = make_url(Settings().database_url)
+    return url.get_backend_name() == "sqlite" and not Path(url.database or "").exists()
 
 
 def current_rep() -> RepInfo:

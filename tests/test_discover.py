@@ -64,3 +64,17 @@ def test_rejected_key_marks_the_run_failed(session: Session, monkeypatch: pytest
     assert run.status == "failed"
     assert run.finished_at is not None
     assert session.scalar(select(func.count()).select_from(Contractor)) == 0
+
+
+@pytest.mark.parametrize("key", [None, "replace-me"])
+def test_no_coveo_key_stops_before_opening_a_run(session: Session, monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
+    def no_network(*args: object) -> NoReturn:
+        raise AssertionError("discover called Coveo without a key")
+
+    monkeypatch.setattr(coveo, "fetch_pages", no_network)
+    settings = Settings(_env_file=None, database_url="unused", coveo_org_id="test-org", coveo_api_key=key)
+
+    with pytest.raises(SystemExit, match="COVEO_API_KEY is not set"):
+        discover(session, TERRITORY, settings)
+
+    assert session.scalar(select(func.count()).select_from(Run)) == 0

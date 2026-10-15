@@ -231,3 +231,15 @@ def test_the_call_sheet_starts_on_the_leads_current_status(app: AppTest) -> None
     next(button for button in app.button if button.label == "Call").click().run()
 
     assert app.segmented_control(key="outcome_3").value == "Considering us"
+
+
+def test_a_missing_database_shows_the_seed_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    missing = tmp_path / "leads.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{missing}")
+    monkeypatch.setenv("COVEO_ORG_ID", "test-org")
+
+    app = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
+
+    assert not app.exception
+    assert "cp seed/leads.db data/leads.db" in app.error[0].value
+    assert not missing.exists()  # checked before connecting, so no empty file is left behind
