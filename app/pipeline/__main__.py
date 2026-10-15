@@ -6,9 +6,7 @@ Usage (from the repo root):
 """
 
 import argparse
-from pathlib import Path
 
-import yaml
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
@@ -16,7 +14,7 @@ from app.pipeline.check_websites import check_websites
 from app.pipeline.discover import discover
 from app.pipeline.fetch import fetch
 from app.pipeline.parse import parse
-from app.settings import Settings
+from app.settings import Settings, load_territory
 
 STAGES = ["discover", "fetch", "parse", "check_websites"]
 
@@ -34,7 +32,7 @@ def main() -> None:
         parser.error(f"unknown stage {', '.join(unknown)}; choose from {','.join(STAGES)}")
 
     settings = Settings()
-    territory = yaml.safe_load(Path("config/distributor.yaml").read_text())["territory"]
+    territory = load_territory()
 
     with Session(make_engine(settings.database_url)) as session:
         for stage in stages:

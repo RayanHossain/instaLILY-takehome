@@ -1,5 +1,10 @@
-"""Application settings, read from the .env file (environment variables win)."""
+"""Application settings: values from the .env file (environment variables win), and the
+territory from config/distributor.yaml."""
 
+from pathlib import Path
+from typing import Any
+
+import yaml
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,3 +21,8 @@ class Settings(BaseSettings):
     coveo_org_id: str
     # SecretStr prints as '**********', so the key stays out of reprs and logs.
     coveo_api_key: SecretStr
+
+
+def load_territory() -> dict[str, Any]:
+    """Read the territory (zip, lat, lng, radius_miles) from config/distributor.yaml."""
+    return yaml.safe_load(Path("config/distributor.yaml").read_text())["territory"]
