@@ -210,10 +210,10 @@ def _ask(
 
     Every failed attempt is logged. An error in RETRY_CODES (a 429, a 503, ...), or no answer
     at all (a timeout, or a connection that failed or dropped), is tried again after a pause:
-    the one the error suggests, if it suggests one. After four tries in all, a 429 stops the stage cleanly, since every
-    other input would hit the same limit, and a rerun picks up from the cache. Any other
-    error gives up on this input only: None, after four tries, or at once for an error
-    that retrying can't fix (a 400, say).
+    the one the error suggests, if it suggests one. After four tries in all, a 429 stops the
+    stage cleanly, since every other input would hit the same limit, and a rerun picks up
+    from the cache. Any other error gives up on this input only: None, after four tries, or
+    at once for an error that retrying can't fix (a 400, say).
     """
     global _last_request_at
     tries = 0
