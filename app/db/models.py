@@ -107,7 +107,9 @@ class AiCache(Base):
     """One answer from an AI model, saved before it is parsed.
 
     An answer that passed validation is reused: the next request with the same
-    cache_key gets the newest valid answer without calling the model.
+    cache_key gets the newest valid answer without calling the model. An answer still
+    invalid after the retry is remembered the same way (gave_up), so its input isn't
+    asked again until the model, the prompt version, or the input changes the key.
     """
 
     __tablename__ = "ai_cache"
@@ -120,6 +122,8 @@ class AiCache(Base):
     response: Mapped[str] = mapped_column(Text)  # the answer exactly as received
     valid: Mapped[bool] = mapped_column(Boolean, default=False)  # True once it passed validation
     error: Mapped[str | None] = mapped_column(Text)  # why it failed validation
+    # True on the retry's answer when it was still invalid: the model's fault, so remembered.
+    gave_up: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

@@ -3,9 +3,11 @@
 Calls go to the Gemma model named by GEMINI_MODEL on the Gemini API, paced to
 GEMINI_REQUESTS_PER_MINUTE. Every answer is saved in ai_cache before it is parsed, and
 an answer that validates is reused for the same model, prompt, and input, so a rerun
-makes no calls. Every attempt, a cache hit included, is logged in ai_calls under the
-stage run that asked, and totals() counts a run's attempts. Prompts are versioned text
-files in app/ai/prompts/.
+makes no calls. An answer still invalid after the retry is the model's fault, so it is
+remembered under the same key and its input skipped; API errors are never remembered.
+Every attempt, a cache hit included, is logged in ai_calls under the stage run that
+asked, and totals() counts a run's attempts. Prompts are versioned text files in
+app/ai/prompts/.
 """
 
 import hashlib
@@ -19,7 +21,7 @@ import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AiCache, AiCall, StageRun
@@ -60,8 +62,10 @@ def generate(
 
     The newest valid answer cached for the same model, prompt, and input is returned
     without a call. Otherwise each answer is saved, then validated; an invalid answer
-    gets one retry that shows the model the validation error. Every attempt, the cache
-    hit included, is logged as a row in ai_calls.
+    gets one retry that shows the model the validation error. If the retry's answer is
+    still invalid, that is remembered under the same key: later calls return None without
+    asking, until the model, the prompt version, or the input changes. Every attempt, a
+    cache hit included, is logged as a row in ai_calls.
 
     Args:
         session: An open session. Each answer and each ai_calls row is committed at once.
@@ -115,14 +119,18 @@ def generate(
 
     cache_key = hashlib.sha256(f"{settings.gemini_model}\n{prompt_name}\n{input_text}".encode()).hexdigest()
     cached = session.scalar(
-        select(AiCache.response)
-        .where(AiCache.cache_key == cache_key, AiCache.valid)
+        select(AiCache)
+        .where(AiCache.cache_key == cache_key, or_(AiCache.valid, AiCache.gave_up))
         .order_by(AiCache.id.desc())
         .limit(1)
     )
-    if cached is not None:
+    if cached is not None and cached.valid:
         log("ok", cache_hit=True)
-        return output_model.model_validate_json(_strip_code_fence(cached))
+        return output_model.model_validate_json(_strip_code_fence(cached.response))
+    if cached is not None:
+        log("invalid", cache_hit=True, error="still invalid after the retry on an earlier run, so not asked again")
+        print(f"ai: {prompt_name} answer was still invalid after the retry on an earlier run; skipping this input")
+        return None
 
     if not settings.gemini_api_key:
         raise SystemExit("GEMINI_API_KEY is not set. Put a Gemini API key in .env to run the AI stages.")
@@ -152,6 +160,7 @@ def generate(
                     check(result)
             except ValueError as error:  # a Pydantic ValidationError is a ValueError too
                 saved.error = str(error)
+                saved.gave_up = attempt == 1  # still invalid after the retry: remembered, so later runs skip it
                 log("invalid", seconds=seconds, usage=response.usage_metadata, error=str(error))
                 # The retry shows the model its answer and what was wrong with it.
                 contents += [
@@ -175,12 +184,14 @@ def totals(session: Session, run: StageRun) -> dict[str, float]:
     """
     calls = session.scalars(select(AiCall).where(AiCall.run_id == run.id)).all()
     requests = [call for call in calls if not call.cache_hit]
+    remembered = sum(call.cache_hit and call.outcome == "invalid" for call in calls)
     outcomes = Counter(call.outcome for call in requests)
     # How long the model took to answer, valid or not; errors are left out.
     answer_seconds = [call.latency_seconds or 0.0 for call in requests if call.outcome in ("ok", "ok after a retry", "invalid")]
     return {
         "requests to the model": len(requests),
-        "cache hits": len(calls) - len(requests),
+        "cache hits": len(calls) - len(requests) - remembered,
+        "remembered as invalid": remembered,  # skipped without a request: still invalid after the retry on an earlier run
         **{outcome: outcomes[outcome] for outcome in OUTCOMES},
         "input tokens": sum(call.input_tokens or 0 for call in requests),
         "output tokens": sum(call.output_tokens or 0 for call in requests),

@@ -130,17 +130,33 @@ def test_invalid_answer_is_retried_once_with_the_error(session: Session, clock: 
     assert clock.pauses == [6.0]  # paced: 10 requests per minute is one every 6 seconds
 
 
-def test_answer_still_invalid_after_the_retry_is_recorded_and_skipped(session: Session, run: StageRun) -> None:
+def test_answer_still_invalid_after_the_retry_is_remembered_until_the_key_changes(session: Session, run: StageRun) -> None:
     requests: list[httpx.Request] = []
+    transport = fake_gemini([answer("No idea.")], requests)
 
-    result = client.generate(
-        session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=fake_gemini([answer("No idea.")], requests)
-    )
+    assert client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport) is None
+    assert client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport) is None
 
-    assert result is None
-    assert len(requests) == 2
-    assert [call.outcome for call in logged(session)] == ["invalid", "invalid"]
-    assert [row.valid for row in session.scalars(select(AiCache))] == [False, False]
+    assert len(requests) == 2  # the second call was skipped from memory: the model's fault isn't asked again
+    assert [(call.cache_hit, call.outcome) for call in logged(session)] == [(False, "invalid"), (False, "invalid"), (True, "invalid")]
+    assert [(row.valid, row.gave_up) for row in session.scalars(select(AiCache).order_by(AiCache.id))] == [(False, False), (False, True)]
+    assert client.totals(session, run)["remembered as invalid"] == 1
+
+    # The key covers the model, the prompt version, and the input, so another model is asked afresh.
+    other_model = SETTINGS.model_copy(update={"gemini_model": "gemma-4-26b-a4b-it"})
+    client.generate(session, other_model, PROMPT, INPUT, Company, run=run, transport=transport)
+    assert len(requests) == 4
+
+
+def test_api_errors_are_never_remembered(session: Session, run: StageRun) -> None:
+    requests: list[httpx.Request] = []
+    internal_error = (500, {"error": {"code": 500, "message": "Internal error encountered.", "status": "INTERNAL"}})
+    transport = fake_gemini([internal_error], requests)
+
+    assert client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport) is None
+    assert client.generate(session, SETTINGS, PROMPT, INPUT, Company, run=run, transport=transport) is None
+
+    assert len(requests) == 8  # Google's fault: every run tries again, four tries each
 
 
 def test_cache_hit_makes_no_call(session: Session, run: StageRun) -> None:
@@ -241,6 +257,7 @@ def test_every_attempt_is_logged_and_counted(session: Session, clock: FakeClock,
     assert client.totals(session, run) == {
         "requests to the model": 3,
         "cache hits": 1,
+        "remembered as invalid": 0,
         "ok": 0,
         "ok after a retry": 1,
         "invalid": 1,
