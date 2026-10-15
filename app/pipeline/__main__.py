@@ -3,6 +3,7 @@
 Usage (from the repo root):
     python -m app.pipeline run --stages discover
     python -m app.pipeline run --stages fetch,parse,check_websites
+    python -m app.pipeline run --stages capture_websites
 """
 
 import argparse
@@ -10,13 +11,14 @@ import argparse
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
+from app.pipeline.capture_websites import capture_websites
 from app.pipeline.check_websites import check_websites
 from app.pipeline.discover import discover
 from app.pipeline.fetch import fetch
 from app.pipeline.parse import parse
 from app.settings import Settings, load_territory
 
-STAGES = ["discover", "fetch", "parse", "check_websites"]
+STAGES = ["discover", "fetch", "parse", "check_websites", "capture_websites"]
 
 
 def main() -> None:
@@ -45,6 +47,8 @@ def main() -> None:
                 parse(session)
             elif stage == "check_websites":
                 check_websites(session)
+            elif stage == "capture_websites":
+                capture_websites(session)
 
 
 if __name__ == "__main__":
