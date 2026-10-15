@@ -19,8 +19,9 @@ class Settings(BaseSettings):
 
     database_url: str
     coveo_org_id: str
-    # SecretStr prints as '**********', so the key stays out of reprs and logs.
+    # SecretStr prints as '**********', so the keys stay out of reprs and logs.
     coveo_api_key: SecretStr
+    gemini_api_key: SecretStr
 
 
 def load_territory() -> dict[str, Any]:

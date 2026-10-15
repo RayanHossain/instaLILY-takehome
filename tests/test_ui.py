@@ -30,6 +30,7 @@ def test_page_renders_the_leads_with_the_nearest_one_selected(
     monkeypatch.setenv("DATABASE_URL", str(engine.url))
     monkeypatch.setenv("COVEO_ORG_ID", "test-org")
     monkeypatch.setenv("COVEO_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
 
     app = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
 
