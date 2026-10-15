@@ -113,7 +113,7 @@ def test_get_lead_returns_the_total_flags_and_reasons(session: Session) -> None:
 
     assert lead.score.total == 83.5  # (53*15 + 90*45 + 50*10 + 100*30) / 100, rounded to one decimal
     assert lead.score.flags[0]["flag"] == "New business"
-    assert [signal["input"] for signal in lead.reasons["value"]] == ["3 reviews", "Certified Plus", "no other trades found"]
+    assert [signal.input for signal in lead.reasons["value"]] == ["3 reviews", "Certified Plus", "no other trades found"]
     assert get_lead(session, "new").score.preset == "Balanced"  # the default
     with pytest.raises(ValueError, match="Unknown preset"):
         get_lead(session, "new", preset="Nope")

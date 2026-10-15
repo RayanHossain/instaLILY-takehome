@@ -20,6 +20,10 @@ from app.settings import load_territory
 
 # GAF's contractor tiers, highest first.
 TIERS = ["President's Club", "Master Elite", "Certified Plus", "Certified"]
+# Every tag a lead can carry, rarest first, so a narrow column cuts off the common ones. Tags
+# name only exceptions, so "Certified", the most common tier, gets none. Top pick: in every
+# preset's top N. Brief: has a brief written while in a top N.
+TAGS = ["Top pick", "Brief", "New business", "Low rating", "President's Club", "Master Elite", "Certified Plus"]
 
 EARTH_RADIUS_MILES = 3958.8
 
@@ -50,6 +54,17 @@ class LeadRow(BaseModel):
     phone: str | None
     enrolled_in_gaf_leads: bool | None  # None means GAF didn't say
     score: LeadScore | None  # None until the score stage has scored the contractor
+    tags: list[str] = []  # from TAGS, in that order
+
+
+class Signal(BaseModel):
+    """One signal behind a component score, from the score stage's reasons."""
+
+    signal: str  # e.g. "reviews"
+    input: str  # in plain words, e.g. "312 reviews" or "founding year unknown"
+    points: float
+    weight: float
+    guess: bool  # the data was missing, so it scored the neutral missing_points
 
 
 class LeadDetail(BaseModel):
@@ -70,7 +85,7 @@ class LeadDetail(BaseModel):
     enrolled_in_gaf_leads: bool | None
     about_text: str | None
     score: LeadScore | None
-    reasons: dict[str, list[dict[str, Any]]] | None  # each component's signals; None until scored
+    reasons: dict[str, list[Signal]] | None  # each component's signals; None until scored
     brief: Brief | None  # its latest brief, written while it was in a preset's top N
 
 
@@ -103,6 +118,7 @@ def list_leads(
     max_miles: float | None = None,
     preset: str | None = None,
     sort: Literal["distance", "total"] = "distance",
+    top_n: int = 10,
 ) -> list[LeadRow]:
     """List the contractors from the most recent discover, nearest first or highest total first.
 
@@ -117,13 +133,44 @@ def list_leads(
             None uses the default, Balanced.
         sort: "distance" for nearest first, or "total" for highest total first. Leads not
             scored yet sort last.
+        top_n: How many leads each preset's top takes, for the Top pick and Brief tags.
+            The UI passes TOP_LEADS_PER_PRESET, the number the brief stage uses.
 
     Returns:
-        One LeadRow per matching contractor.
+        One LeadRow per matching contractor, with its tags.
 
     Raises:
         ValueError: The preset isn't one in config/scoring.yaml.
     """
+    top = top_leads(session, top_n)
+    briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
+    leads = _rows(session, search, tiers, max_miles, preset, sort)
+    for lead in leads:
+        lead.tags = _tags(lead, top, briefed)
+    return leads
+
+
+def top_leads(session: Session, top_n: int) -> dict[str, list[str]]:
+    """Each preset's top_n scored leads, highest total first, as GAF IDs.
+
+    Ranked by the same function that sorts the lead table, so the table, its tags, and
+    the brief stage can't drift apart.
+    """
+    return {
+        preset: [lead.gaf_id for lead in _rows(session, preset=preset, sort="total") if lead.score][:top_n]
+        for preset in scoring.load_scoring_config().presets
+    }
+
+
+def _rows(
+    session: Session,
+    search: str | None = None,
+    tiers: list[str] | None = None,
+    max_miles: float | None = None,
+    preset: str | None = None,
+    sort: Literal["distance", "total"] = "distance",
+) -> list[LeadRow]:
+    """The lead table's rows without their tags: list_leads does the filtering and sorting here."""
     territory = load_territory()
     preset_name, weights = _preset(preset)
     scores = {score.contractor_id: score for score in session.scalars(select(Score))}
@@ -176,6 +223,19 @@ def list_leads(
     return leads
 
 
+def _tags(lead: LeadRow, top: dict[str, list[str]], briefed: set[str]) -> list[str]:
+    """The lead's exceptions, in the order of TAGS: Top pick, Brief, its flags, and its tier unless plain Certified."""
+    found = [lead.tier] if lead.tier in TAGS else []
+    found += [flag["flag"] for flag in lead.score.flags] if lead.score else []
+    in_top = [lead.gaf_id in ids for ids in top.values()]
+    if all(in_top):
+        found.append("Top pick")
+    # A brief written under older rules stays stored, but shows only while its lead is in a top N.
+    if any(in_top) and lead.gaf_id in briefed:
+        found.append("Brief")
+    return sorted(found, key=TAGS.index)
+
+
 def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDetail:
     """Return the details of one contractor: its scores under the preset, their reasons, and its brief.
 
@@ -189,6 +249,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
     preset_name, weights = _preset(preset)
     score = session.get(Score, gaf_id)
     stored_brief = session.get(ContractorBrief, gaf_id)
+    distance = distance_miles(contractor.lat, contractor.lng, load_territory())
+    missing_points = scoring.load_scoring_config().missing_points
 
     return LeadDetail(
         gaf_id=contractor.gaf_id,
@@ -197,7 +259,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         phone=contractor.phone,
         website_url=contractor.website_url,
         profile_url=contractor.profile_url,
-        distance_miles=distance_miles(contractor.lat, contractor.lng, load_territory()),
+        distance_miles=distance,
         tier=tier(contractor.certifications),
         certifications=contractor.certifications,
         rating=contractor.rating,
@@ -206,9 +268,24 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None) -> LeadDe
         enrolled_in_gaf_leads=contractor.enrolled_in_gaf_leads,
         about_text=contractor.about_text,
         score=_lead_score(score, preset_name, weights),
-        reasons=score.reasons if score else None,
+        reasons=_signals(score.reasons, missing_points, distance) if score else None,
         brief=Brief.model_validate(stored_brief.content) if stored_brief else None,
     )
+
+
+def _signals(reasons: dict[str, list[dict[str, Any]]], missing_points: int, distance: float | None) -> dict[str, list[Signal]]:
+    """A score's reasons as Signals, each marked as a guess when its data was missing.
+
+    A signal with no data scores missing_points. Distance is measured instead, so it's a
+    guess only without coordinates: one lead sits exactly halfway across the territory.
+    """
+    return {
+        component: [
+            Signal(**signal, guess=distance is None if component == "distance" else signal["points"] == missing_points)
+            for signal in signals
+        ]
+        for component, signals in reasons.items()
+    }
 
 
 def _preset(name: str | None) -> tuple[str, scoring.Preset]:

@@ -7,7 +7,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
-from app.db.models import Contractor, Run
+from app.db.models import Contractor, Run, Score
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
@@ -16,13 +16,30 @@ TERRITORY = load_territory()
 
 @pytest.fixture
 def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> AppTest:
-    """The page, not yet run, on a database with three contractors: Alpha nearest, Gamma farthest."""
+    """The page, not yet run, on a database with three scored contractors.
+
+    Balanced ranks them Alpha, Beta, Gamma; Quick wins ranks them Beta, Gamma, Alpha.
+    """
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
     session.flush()
     shared = {"certifications": ["GAF Master Elite® - Certification"], "first_seen_run": run.id, "last_seen_run": run.id}
     for gaf_id, name, lat_offset in [("1", "Alpha Roofing", 0.0), ("2", "Beta Roofing", 0.05), ("3", "Gamma Roofing", 0.1)]:
         session.add(Contractor(gaf_id=gaf_id, name=name, lat=TERRITORY["lat"] + lat_offset, lng=TERRITORY["lng"], **shared))
+    session.flush()
+    for gaf_id, value, winnability, distance in [("1", 90, 20, 100), ("2", 20, 95, 80), ("3", 60, 60, 60)]:
+        session.add(
+            Score(
+                contractor_id=gaf_id,
+                value=value,
+                winnability=winnability,
+                stability=50,
+                distance=distance,
+                flags=[],
+                reasons={},
+                rules_version="test",
+            )
+        )
     session.commit()
     # Environment variables win over .env, so the app opens the test database, never data/leads.db.
     monkeypatch.setenv("DATABASE_URL", str(engine.url))
@@ -67,3 +84,22 @@ def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> No
     app.sidebar.text_input[0].input("beta").run()
 
     assert shown_lead(app) == "Beta Roofing"
+
+
+def test_the_selected_lead_survives_a_preset_switch_that_re_sorts_the_table(app: AppTest) -> None:
+    app.session_state["lead_id"] = "3"
+    app.run()
+    assert app.session_state["lead_table"]["selection"]["rows"] == [2]  # Balanced: Alpha, Beta, Gamma
+
+    app.segmented_control(key="preset").set_value("Quick wins").run()
+
+    assert shown_lead(app) == "Gamma Roofing"
+    assert app.session_state["lead_table"]["selection"]["rows"] == [1]  # Quick wins: Beta, Gamma, Alpha
+
+
+def test_a_link_with_a_preset_opens_the_page_ranked_by_it(app: AppTest) -> None:
+    app.query_params["preset"] = "Quick wins"
+    app.run()
+
+    assert app.segmented_control(key="preset").value == "Quick wins"
+    assert shown_lead(app) == "Beta Roofing"  # the top lead under Quick wins

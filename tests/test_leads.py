@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
-from app.db.models import Contractor, Run
-from app.services.leads import LeadRow, get_lead, list_leads, tier
+from app.db.models import Contractor, ContractorBrief, Run, Score
+from app.services.leads import LeadRow, get_lead, list_leads, tier, top_leads
 from app.settings import load_territory
 from app.sources import coveo
 
@@ -41,6 +41,40 @@ def add_contractor(session: Session, run: Run, gaf_id: str, **columns: Any) -> N
         "last_seen_run": run.id,
     }
     session.add(Contractor(gaf_id=gaf_id, **(values | columns)))
+    session.flush()
+
+
+def add_score(session: Session, gaf_id: str, points: float, flags: list[dict[str, str]] | None = None, **reasons: Any) -> None:
+    """Score a contractor with the same points in every component, and the given reasons."""
+    session.add(
+        Score(
+            contractor_id=gaf_id,
+            value=points,
+            winnability=points,
+            stability=points,
+            distance=points,
+            flags=flags or [],
+            reasons=reasons,
+            rules_version="test",
+        )
+    )
+    session.flush()
+
+
+# A valid brief's content, as the brief stage stores it.
+BRIEF = {
+    "why_this_contractor": "It does replacements.",
+    "first_touch": {"opener": "Hi.", "reason": "It fits."},
+    "follow_ups": [{"step": "Call back.", "reason": "To follow up."}],
+    "questions": ["Any jobs?", "When?"],
+    "selling_points": [],
+    "cited_fact_ids": [],
+}
+
+
+def add_brief(session: Session, gaf_id: str, content: dict[str, Any] = BRIEF) -> None:
+    """Store a brief for a contractor."""
+    session.add(ContractorBrief(contractor_id=gaf_id, content=content, input_hash="0" * 64, model="test", prompt_version="test"))
     session.flush()
 
 
@@ -159,3 +193,42 @@ def test_get_lead_returns_the_details_or_raises(session: Session) -> None:
     assert lead.about_text is None
     with pytest.raises(LookupError):
         get_lead(session, "no-such-id")
+
+
+def test_tags_name_only_the_exceptions(session: Session) -> None:
+    run = make_run(session)
+    add_contractor(session, run, "star", certifications=[MASTER_ELITE])
+    add_contractor(session, run, "other")  # plain Certified: no tier tag
+    add_score(session, "star", 90)
+    add_score(session, "other", 50, flags=[{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}])
+    add_brief(session, "star")
+    add_brief(session, "other")  # written under older rules, when it was in a top N
+
+    assert top_leads(session, 1) == {"Balanced": ["star"], "Big accounts": ["star"], "Quick wins": ["star"]}
+    tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=1)}
+    assert tags == {"star": ["Top pick", "Brief", "Master Elite"], "other": ["New business"]}
+
+    # In every preset's top 2, the other lead is a Top pick too, and its brief counts again.
+    tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=2)}
+    assert tags["other"] == ["Top pick", "Brief", "New business"]
+
+
+def test_a_signal_is_a_guess_only_when_its_data_was_missing(session: Session) -> None:
+    run = make_run(session)
+    add_contractor(session, run, "1")
+    add_score(
+        session,
+        "1",
+        60,
+        value=[
+            {"signal": "reviews", "input": "no reviews", "points": 50, "weight": 50},
+            {"signal": "tier", "input": "Certified", "points": 40, "weight": 30},
+        ],
+        # Measured, so not a guess, even though halfway across the territory scores 50.
+        distance=[{"signal": "distance", "input": "12.5 miles from the branch", "points": 50, "weight": 100}],
+    )
+
+    reasons = get_lead(session, "1").reasons
+
+    assert [signal.guess for signal in reasons["value"]] == [True, False]
+    assert [signal.guess for signal in reasons["distance"]] == [False]

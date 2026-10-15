@@ -9,12 +9,14 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from app.db.engine import make_engine
+from app.scoring import Preset, load_scoring_config
 from app.services import leads
-from app.services.leads import TIERS, LeadDetail, LeadRow
+from app.services.leads import TAGS, TIERS, LeadDetail, LeadRow
 from app.settings import Settings, load_territory
 
-# What main.py may use. TIERS and load_territory are passed through unchanged.
-__all__ = ["TIERS", "get_lead", "list_leads", "load_territory"]
+# What main.py may use. The constants, the two models (for type hints), load_scoring_config,
+# and load_territory are passed through unchanged.
+__all__ = ["TAGS", "TIERS", "LeadDetail", "Preset", "get_lead", "list_leads", "load_scoring_config", "load_territory"]
 
 
 @st.cache_resource
@@ -28,13 +30,21 @@ def _open_session() -> Session:
     return Session(_engine(Settings().database_url))
 
 
-def list_leads(search: str, tiers: list[str], max_miles: float) -> list[LeadRow]:
-    """The lead table's rows for the sidebar's search and filters, nearest first."""
+def list_leads(search: str, tiers: list[str], max_miles: float, preset: str) -> list[LeadRow]:
+    """The lead table's rows for the sidebar's search and filters, highest total under the preset first."""
     with _open_session() as session:
-        return leads.list_leads(session, search=search, tiers=tiers, max_miles=max_miles)
+        return leads.list_leads(
+            session,
+            search=search,
+            tiers=tiers,
+            max_miles=max_miles,
+            preset=preset,
+            sort="total",
+            top_n=Settings().top_leads_per_preset,
+        )
 
 
-def get_lead(gaf_id: str) -> LeadDetail:
-    """The detail panel's data for one contractor."""
+def get_lead(gaf_id: str, preset: str) -> LeadDetail:
+    """The detail panel's data for one contractor, scored under the preset."""
     with _open_session() as session:
-        return leads.get_lead(session, gaf_id)
+        return leads.get_lead(session, gaf_id, preset=preset)

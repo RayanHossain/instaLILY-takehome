@@ -1,7 +1,7 @@
 """Brief stage: a short touch plan for each preset's top leads, written by the AI from the facts it's given.
 
 The leads are the union of every preset's top N by total (N is TOP_LEADS_PER_PRESET,
-10 by default), ranked by the same list_leads the services use, so the two can't drift
+10 by default), ranked by the same top_leads the services use, so the two can't drift
 apart. Each lead's input is its name, city, tier, reviews and rating, years in business,
 distance, facts with their ids and quotes, and matched selling points: the evidence
 behind its scores in plain words, never a score component's name, and never its total,
@@ -17,11 +17,11 @@ from functools import partial
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import briefs, scoring
+from app import briefs
 from app.ai import client as ai
 from app.db.models import Contractor, ContractorBrief, Fact, Score, StageRun, utc_now
 from app.db.upsert import upsert
-from app.services.leads import list_leads, tier
+from app.services.leads import tier, top_leads
 from app.settings import Settings, load_selling_points
 
 PROMPT = "write_brief_v2"  # v2 describes the evidence in plain words and never names a score component
@@ -40,13 +40,11 @@ class LeadInput:
 def pick_leads(session: Session, top_n: int) -> list[str]:
     """The GAF IDs in any preset's top_n by total, each once, in the order first met.
 
-    Ranked by the services' own list_leads, so the briefs and the lead list can't drift apart.
+    Ranked by the services' own top_leads, so the briefs and the lead list can't drift apart.
     """
     picked: list[str] = []
-    for preset in scoring.load_scoring_config().presets:
-        for lead in list_leads(session, preset=preset, sort="total")[:top_n]:
-            if lead.score is not None and lead.gaf_id not in picked:
-                picked.append(lead.gaf_id)
+    for ids in top_leads(session, top_n).values():
+        picked += [gaf_id for gaf_id in ids if gaf_id not in picked]
     return picked
 
 
