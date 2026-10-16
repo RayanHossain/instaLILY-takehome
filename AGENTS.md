@@ -27,7 +27,7 @@ Python 3.11+, SQLAlchemy 2.0 (typed ORM models), Alembic (render_as_batch=True),
 - app/sources/: one adapter per data source (coveo.py for GAF's search, gaf_profile.py, websites.py)
 - app/pipeline/: CLI entry point and one module per stage
 - app/services/: one module per area (leads.py, notes.py, reps.py); functions take a session and return Pydantic models
-- app/ui/: main.py and data.py (the UI's only route to services). main() draws what both pages share (sidebar, title, preset picker), then runs the current page through st.navigation: top_leads_page() (Top leads, the landing page) or all_leads_page() (All leads). streamlit_app.py at the repo root calls main().
+- app/ui/: main.py and data.py (the UI's only route to services). main() draws the sidebar both pages share, then runs the current page through st.navigation: top_leads_page() (Top leads, the landing page: every preset's briefed top N, one lead at a time) or all_leads_page() (All leads: the table, with the preset picker). streamlit_app.py at the repo root calls main().
 - app_pages/: top_leads.py and all_leads.py, two-line files that call the page functions in app/ui/main.py. st.navigation needs a file per page so AppTest can switch to it.
 - app/ai/: client.py (generate(), the one way to call the AI: ai_cache, validation, pacing, backoff) and prompts/ (versioned prompt files, e.g. extract_facts_v1.txt; a stage names its prompt in PROMPT)
 - app/evals/: python -m app.evals extract scores each extracted field's precision and recall against evals/extract_gold.yaml (hand-corrected gold), from cached answers, and writes each gold contractor's exact input to evals/inputs/<GAF ID>.txt (gitignored)
