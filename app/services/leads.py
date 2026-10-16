@@ -54,6 +54,7 @@ class LeadRow(BaseModel):
     enrolled_in_gaf_leads: bool | None  # None means GAF didn't say
     score: LeadScore | None  # None until the score stage has scored the contractor
     tags: list[str] = []  # in the order of all_tags()
+    has_brief: bool = False  # a brief the app shows: one is stored, and the lead is in a preset's top N
 
 
 class Signal(BaseModel):
@@ -159,9 +160,12 @@ def list_leads(
         ValueError: The preset isn't one in config/scoring.yaml.
     """
     top = top_leads(session, top_n)
+    briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
     leads = _rows(session, search, tiers, max_miles, preset, sort)
     for lead in leads:
         lead.tags = _tags(lead, top)
+        # A brief written under older rules stays stored, but shows only while its lead is in a top N.
+        lead.has_brief = lead.gaf_id in briefed and any(lead.gaf_id in ids for ids in top.values())
     return leads
 
 
@@ -181,6 +185,7 @@ def briefed_top_leads(session: Session, top_n: int) -> list[LeadRow]:
         places = [ids.index(lead.gaf_id) for ids in top.values() if lead.gaf_id in ids]
         if places and lead.gaf_id in briefed:
             lead.tags = _tags(lead, top)
+            lead.has_brief = True
             ranked.append((len(places), min(places), lead))
     ranked.sort(key=lambda entry: (-entry[0], entry[1]))
     return [lead for _, _, lead in ranked]

@@ -307,3 +307,5 @@ def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> No
     assert fallen.top_presets == []
     assert [(fact.value, fact.quote) for fact in fallen.facts] == [("Roof replacement", "We replace roofs.")]
     assert get_lead(session, "fallen", top_n=2).brief is not None  # back in a top 2
+    # The table marks the same leads.
+    assert {lead.gaf_id: lead.has_brief for lead in list_leads(session, top_n=1)} == {"star": True, "fallen": False}
