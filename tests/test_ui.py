@@ -100,7 +100,8 @@ def test_the_landing_page_shows_one_top_lead_with_its_brief(app: AppTest) -> Non
     assert app.header[0].value == "Top leads"
     assert not app.dataframe  # no table: one lead at a time
     assert shown_lead(app) == "Alpha Roofing"
-    assert app.caption[0].value == "Lead 1 of 2 · Status: **New**"
+    assert app.caption[0].value == "Lead 1 of 2 · :gray-badge[New]"
+    assert "**Notes**" not in [markdown.value for markdown in app.markdown]  # notes live on the call sheet
     assert any("Atlantic Ave" in markdown.value for markdown in app.markdown)  # the brief, no tab to click
     with pytest.raises(KeyError):
         app.segmented_control(key="preset")  # no preset picker: the list covers every preset's top
@@ -139,7 +140,7 @@ def test_logging_a_call_on_the_landing_page_opens_the_next_top_lead(app: AppTest
     assert any(button.label == "Log call" for button in app.button)  # Beta's call sheet is open
     # Alpha stays on the page, now Contacted.
     labelled(app, "Previous").click().run()
-    assert app.caption[0].value == "Lead 1 of 2 · Status: **Contacted**"
+    assert app.caption[0].value.startswith("Lead 1 of 2 · :blue-badge[Contacted] · last logged")
 
 
 def test_the_all_leads_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:

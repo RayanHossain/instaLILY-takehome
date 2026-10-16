@@ -9,6 +9,7 @@ never does.
 """
 
 import re
+import textwrap
 
 import streamlit as st
 
@@ -17,8 +18,9 @@ from app.ui import data
 DASH = "—"  # shown for a missing value
 # On All leads, each detail tab scrolls inside a bordered box of this height, with the scrollbar below.
 TAB_HEIGHT = 310
-# On Top leads, the brief, the score, and the notes sit side by side in bordered boxes this tall.
-TOP_BOX_HEIGHT = 560
+# On Top leads, the brief and the score sit side by side in bordered boxes this tall: as tall
+# as a 1440x900 screen allows, so every top lead's brief fits without scrolling.
+TOP_BOX_HEIGHT = 600
 # Streamlit keeps a scrolling container's scrollbar hidden until the mouse is over it, and
 # macOS hides it until you scroll, so a box cut off between two sections looked finished.
 # This keeps a scrollbar showing in the detail boxes whenever there's more below. It targets
@@ -154,7 +156,7 @@ def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | N
 
 
 def show_header(lead: data.LeadDetail) -> bool:
-    """The lead's header: the name with preset, tier, and flag badges, one caption line, the phone and links, and About.
+    """The lead's header: the name with preset, tier, and flag badges, one caption line, and the phone, links, and About.
 
     Returns:
         True when the rep clicked Call.
@@ -187,11 +189,11 @@ def show_header(lead: data.LeadDetail) -> bool:
                 st.link_button("Website", lead.website_url, icon=":material/language:")
             if lead.profile_url:
                 st.link_button("GAF profile", lead.profile_url, icon=":material/open_in_new:")
-
-        if lead.about_text:
-            with st.expander("About"):
-                with st.container(height=150, border=False):
-                    st.markdown(plain(lead.about_text))
+            # A button, not an expander under the row, so it takes no height of its own.
+            if lead.about_text:
+                with st.popover("About", icon=":material/info:"):
+                    with st.container(height=300, border=False):
+                        st.markdown(plain(lead.about_text))
     return called
 
 
@@ -230,7 +232,10 @@ def show_fact(fact: data.LeadFact) -> None:
 
 
 def show_brief(lead: data.LeadDetail) -> None:
-    """The Brief tab: the touch plan in the order the rep uses it, then the quoted facts behind it."""
+    """The brief: the touch plan in the order the rep uses it, then the quoted facts behind it.
+
+    Why the opener and each follow-up fit shows on hover, so the plan itself stays short.
+    """
     brief = lead.brief
     if brief is None:
         st.caption(f"Briefs are written for each preset's top {data.top_leads_per_preset()} leads, and this one isn't in any.")
@@ -243,11 +248,10 @@ def show_brief(lead: data.LeadDetail) -> None:
     st.markdown(plain(brief.why_this_contractor))
     if brief.ask_for:
         st.markdown(f"Ask for: **{plain(brief.ask_for)}**")
-    st.markdown(f"> {plain(brief.first_touch.opener)}")
-    st.caption(plain(brief.first_touch.reason))
+    st.markdown(f"> {plain(brief.first_touch.opener)}", help=plain(brief.first_touch.reason))
     st.markdown("**Follow-ups**")
     for follow_up in brief.follow_ups:
-        st.markdown(f"- {plain(follow_up.step)}  \n  :gray[{plain(follow_up.reason)}]")
+        st.markdown(f"- {plain(follow_up.step)}", help=plain(follow_up.reason))
     st.markdown("**Questions**")
     st.markdown("\n".join(f"- {plain(question)}" for question in brief.questions))
     evidence = [fact for fact in lead.facts if fact.id in brief.cited_fact_ids]
@@ -276,11 +280,12 @@ def show_notes(rep_id: int, lead: data.LeadDetail) -> None:
 
 
 def top_leads_page() -> None:
-    """The landing page: every lead in a preset's top N that has a brief, one at a time, with its brief, score, and notes side by side.
+    """The landing page: every lead in a preset's top N that has a brief, one at a time, with its brief and score side by side.
 
     Previous (K) and Next (J) step through them: the leads every preset picks first, and
-    each lead's tags say which presets picked it. Log call opens the next one. Every lead
-    stays on the page whatever its status.
+    each lead's tags say which presets picked it. Above the lead: its status and its last
+    note. Call opens the call sheet, where the rep logs the call and sees the history; Log
+    call opens the next lead's. Every lead stays on the page whatever its status.
     """
     rep = data.current_rep()
     leads = data.briefed_top_leads()
@@ -306,14 +311,20 @@ def top_leads_page() -> None:
     status = data.current_statuses(rep.id, ids)[st.session_state.top_lead_id]
     top_n = data.top_leads_per_preset()
     order = f"Every lead in a preset's top {top_n} that has a brief. Leads more presets pick come first, then the ones placed highest in a preset."
-    st.caption(f"Lead {position + 1} of {len(ids)} · Status: **{status}**", help=order)
+    line = f"Lead {position + 1} of {len(ids)} · {status_badge(status)}"
+    notes = data.lead_notes(rep.id, st.session_state.top_lead_id)
+    if notes:  # the newest note, cut to fit one line
+        line += f" · last logged {notes[0].created_at.astimezone():%b %d}"
+        if notes[0].text:
+            line += f": {plain(textwrap.shorten(notes[0].text, width=90, placeholder='…'))}"
+    st.caption(line, help=order)
 
     lead = data.get_lead(st.session_state.top_lead_id)
     if show_header(lead) or st.session_state.pop("call_next", False):
         call_sheet(rep.id, lead, status, next_id, "top_lead_id")
 
     st.html(DETAIL_SCROLLBAR_CSS)
-    brief_column, why_column, notes_column = st.columns([5, 3, 3])
+    brief_column, why_column = st.columns([2, 1])
     with brief_column:
         st.markdown("**Brief**")
         with st.container(height=TOP_BOX_HEIGHT, border=True, key="brief_box"):
@@ -322,10 +333,6 @@ def top_leads_page() -> None:
         st.markdown("**Why**")
         with st.container(height=TOP_BOX_HEIGHT, border=True, key="why_box"):
             show_why(lead, None)
-    with notes_column:
-        st.markdown("**Notes**")
-        with st.container(height=TOP_BOX_HEIGHT, border=True, key="notes_box"):
-            show_notes(rep.id, lead)
 
 
 def all_leads_page() -> None:
