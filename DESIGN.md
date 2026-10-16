@@ -19,7 +19,7 @@ I assumed a new distributor entering the market, so every contractor is a prospe
 - **Who to call first:** the app opens on the top 10 of each preset (Balanced, Big accounts and Quick wins), 19 leads in all, one at a time, with the signals behind each score. Every other contractor is a click away, ranked by the preset the rep picks.
 - **What to say:** for each preset's top 10, a brief with why this contractor, an opener, follow-ups, and questions about upcoming jobs.
 - **What we know:** facts from the contractor's GAF profile and website, each with the quote it came from: the ones a brief cites, or all of them for a lead without a brief.
-- **Where it stands:** a status on the ladder, notes, and a call sheet that logs a call in one step.
+- **Where it stands:** a status on the ladder, in the same color everywhere, and a call sheet that logs a call in one step and shows how the status has changed.
 
 Where data is missing, the app says so instead of guessing. The clearest time saving is in choosing who to call: 423 contractors become a ranked list with reasons, instead of profiles and websites opened one by one. The briefs help least where little is known. I haven't measured either with reps; in production I'd track the time from opening a lead to logging a call, and the win rate by score band.
 
@@ -111,20 +111,20 @@ I chose Streamlit over React, NiceGUI and HTMX. Python is my strongest language,
 
 The principle is that a rep should know the next step within seconds of opening a lead. A review at laptop size shaped the layout:
 
-- The app opens on Top leads: one lead at a time from every preset's top 10, with its brief, its score's reasons, and its notes side by side, so nothing hides behind a tab. Previous and Next step through them: the leads more presets pick come first, then the ones placed highest in a preset, so the rep has no preset to choose.
+- The app opens on Top leads: one lead at a time from every preset's top 10, with its brief and its score's reasons side by side, so nothing hides behind a tab or a scrollbar. Why each step of the brief fits shows on hover, which keeps every top lead on one screen. Previous and Next step through them: the leads more presets pick come first, then the ones placed highest in a preset, so the rep has no preset to choose.
 - Top leads shows only leads with a brief, so every lead on it comes with a plan.
 - Tags name only exceptions: the presets whose top 10 a lead is in, a tier above Certified, or New business.
-- All leads, the second page, keeps every contractor: the table, ranked by the preset the rep picks, on the left and the selected lead on the right, in tabs.
+- All leads, the second page, keeps every contractor: the table, ranked by the preset the rep picks, on the left and the selected lead on the right, in tabs. A tick marks the leads with a brief, and a click anywhere on a row opens that lead.
 - On All leads, a filter counts leads by stage, so the list shrinks as the rep works.
 - Search by name or phone doubles as a lookup when a contractor calls in.
-- A call sheet logs the outcome and opens the next lead.
+- A call sheet is the one place to log a call or a note. It logs the outcome, shows the history as status changes (New → Contacted), and opens the next lead.
 - Each page fits one laptop screen with no page scroll.
 
 ![The call sheet for Eagle Express, open beside the lead](docs/call-sheet.png)
 
 ## 5. How I built it
 
-I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 186 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
+I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 185 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
 
 ## 6. What I'd do with another 8 hours
 

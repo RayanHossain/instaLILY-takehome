@@ -1,6 +1,6 @@
 # Ridgeline Leads
 
-Ridgeline Leads is a sales-intelligence tool for a roofing distributor's branch: a batch pipeline finds the GAF-certified roofing contractors near the branch, enriches them from their GAF profiles and websites, scores them with plain rules, and has an AI write a short touch plan for the top leads. A Streamlit app opens on Top leads: every preset's top 10 together, one lead at a time, with its brief, the reasons behind its score, its notes, and a call sheet to log the call. All leads, a second page, has the full ranked list.
+Ridgeline Leads is a sales-intelligence tool for a roofing distributor's branch: a batch pipeline finds the GAF-certified roofing contractors near the branch, enriches them from their GAF profiles and websites, scores them with plain rules, and has an AI write a short touch plan for the top leads. A Streamlit app opens on Top leads: every preset's top 10 together, one lead at a time, with its brief and the reasons behind its score side by side, and a call sheet to log each call and see the lead's history. All leads, a second page, has the full ranked list, with a tick on every lead that has a brief.
 
 ![Top leads: the first of the 19 top leads, with its brief, score, and notes side by side](docs/app.png)
 
