@@ -149,6 +149,7 @@ def test_the_all_leads_page_lists_the_leads_and_selects_the_first(app: AppTest) 
     assert not app.exception
     assert app.header[0].value == "All leads"
     assert len(app.dataframe[0].value) == 3
+    assert list(app.dataframe[0].value["Brief"]) == ["✓", "✓", ""]  # Alpha and Beta have briefs
     assert shown_lead(app) == "Alpha Roofing"
     assert [tab.label for tab in app.tabs] == ["Why", "Brief", "Notes"]
 

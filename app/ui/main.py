@@ -89,8 +89,13 @@ def show_history(notes: list[data.Note]) -> None:
 
 
 def remember_pick() -> None:
-    """Store the clicked lead's id. Row positions change with every filter, sort, and preset; ids don't."""
-    rows, ids = st.session_state.lead_table["selection"]["rows"], st.session_state.shown_ids
+    """Store the clicked lead's id. Row positions change with every filter, sort, and preset; ids don't.
+
+    A click on any cell picks its row, so the rep needn't aim for the radio column. The next
+    run selects that row and clears the cell.
+    """
+    selection, ids = st.session_state.lead_table["selection"], st.session_state.shown_ids
+    rows = [row for row, _column in selection["cells"]] or selection["rows"]
     if rows and rows[0] < len(ids):
         st.session_state.lead_id = ids[rows[0]]
 
@@ -406,6 +411,7 @@ def all_leads_page() -> None:
             [
                 {
                     "Score": None if lead.score is None else round(lead.score.total),
+                    "Brief": "✓" if lead.has_brief else "",
                     "Contractor": lead.name,
                     "Area": ", ".join(part for part in (lead.city, lead.state) if part) or None,
                     "Mi": lead.distance_miles,
@@ -416,6 +422,7 @@ def all_leads_page() -> None:
             column_config={
                 # No color: "auto" paints every score under 50 red, which reads as a bad lead.
                 "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d", width=64),
+                "Brief": st.column_config.TextColumn(width=52, help="✓: has a brief, written for a preset's top leads"),
                 "Contractor": st.column_config.TextColumn(width=180),
                 "Area": st.column_config.TextColumn(width=110),
                 "Mi": st.column_config.NumberColumn(format="%.1f", width=42),
@@ -426,7 +433,7 @@ def all_leads_page() -> None:
             placeholder=DASH,
             key="lead_table",
             on_select=remember_pick,
-            selection_mode="single-row-required",
+            selection_mode=["single-row-required", "single-cell"],
         )
 
     with detail_column:
