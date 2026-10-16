@@ -1,10 +1,12 @@
 # Ridgeline Leads
 
-Ridgeline Leads is a sales-intelligence tool for a roofing distributor's branch: a batch pipeline finds the GAF-certified roofing contractors near the branch, enriches them from their GAF profiles and websites, scores them with plain rules, and has an AI write a short touch plan for the top leads. A Streamlit app gives reps the ranked lead list, the reasons behind each score, each lead's brief, and a call sheet to log the call.
+Ridgeline Leads is a sales-intelligence tool for a roofing distributor's branch: a batch pipeline finds the GAF-certified roofing contractors near the branch, enriches them from their GAF profiles and websites, scores them with plain rules, and has an AI write a short touch plan for the top leads. A Streamlit app opens on Top leads: the chosen preset's top 10, one lead at a time, with its brief, the reasons behind its score, its notes, and a call sheet to log the call. All leads, a second page, has the full ranked list.
 
-![The lead list, ranked by the Balanced preset](docs/app.png)
+![Top leads: Balanced's first lead, with its brief, score, and notes side by side](docs/app.png)
 
-![The call sheet beside the lead list](docs/call-sheet.png)
+![The call sheet beside the lead](docs/call-sheet.png)
+
+![All leads: every contractor, ranked by the Balanced preset](docs/all-leads.png)
 
 ## Run it
 
@@ -62,11 +64,11 @@ The seed keeps the pipeline's output but not its raw pages: no GAF search or pro
 
 | What you change | Where | Then rerun | Why |
 |---|---|---|---|
-| Preset weights, or a new preset | `presets` in `config/scoring.yaml` (each must add up to 100) | Nothing for the ranking: click Rerun in the app. Then `brief` for leads new to a preset's top N. | A preset's total is worked out from the stored component scores when leads are read, and never stored. |
+| Preset weights, or a new preset | `presets` in `config/scoring.yaml` (each must add up to 100) | Nothing for the ranking: click Rerun in the app. Then `brief` for leads new to a preset's top N; Top leads skips them until they have one. | A preset's total is worked out from the stored component scores when leads are read, and never stored. A new preset gets its own tag. |
 | Scoring points, buckets, and flag thresholds | `value`, `winnability`, `stability`, and `flags` in `config/scoring.yaml`; bump `rules_version` | `score`, then `brief` | Scores are stored, and each says which `rules_version` made it. A brief's input includes its lead's matched selling points, and credit terms depend on stability and flags. |
 | Territory | `territory` in `config/distributor.yaml`: `zip`, `lat`, `lng` (the branch's coordinates; nothing looks them up from the ZIP), `radius_miles` | Every stage, from `discover` | Discover searches around `lat`/`lng` within the radius. The distance score (100 at the branch, 0 at the radius) and the app's distance filter use the same center and radius. |
 | Selling points | `selling_points` in `config/distributor.yaml`; which lead gets which is `match_selling_points()` in `app/briefs.py` | `brief` | A matched point's description is part of the brief's input, so a changed description rewrites those briefs. A new point needs a rule in `match_selling_points()`, and every id a rule names must stay in the file. |
-| How many top leads get briefs | `TOP_LEADS_PER_PRESET` in `.env` (default 10) | `brief`; the app's Top pick tag follows on Rerun | The brief stage writes briefs for each preset's top N, and the app tags the same N. |
+| How many top leads get briefs | `TOP_LEADS_PER_PRESET` in `.env` (default 10) | `brief`; the app's preset tags and Top leads follow on Rerun | The brief stage writes briefs for each preset's top N. The app tags the same N with the preset's name, and Top leads steps through them. |
 | The model | `GEMINI_MODEL` in `.env` (default `gemma-4-31b-it`) | `extract`, `score`, `brief`; then `python -m app.evals extract` to compare | The model is part of every AI cache key and every brief's record, so a new model answers everything again. Score reads the facts extract writes. |
 | A prompt | Add `app/ai/prompts/<name>_v<N+1>.txt` and point `PROMPT` at it in `app/pipeline/extract.py` or `app/pipeline/brief.py` | That stage (and `score` and `brief` after `extract`) | The cache key holds the prompt's name, not its text, so editing a prompt file in place keeps reusing the cached answers. |
 
@@ -79,7 +81,8 @@ The seed keeps the pipeline's output but not its raw pages: no GAF search or pro
 - `app/pipeline/`: the command line and one module per stage
 - `app/services/`: leads, notes, and reps; each function takes a session and returns Pydantic models
 - `app/sources/`: one adapter per data source: GAF's search, GAF profile pages, and contractor websites
-- `app/ui/`: the Streamlit page (`main.py`) and its only route to the services (`data.py`)
+- `app/ui/`: the Streamlit pages (`main.py`) and their only route to the services (`data.py`)
+- `app_pages/`: one two-line file per page, which Streamlit's navigation runs
 - `config/`: `distributor.yaml` (territory and selling points) and `scoring.yaml` (every scoring number and the presets)
 - `docs/`: the screenshots above
 - `evals/`: `extract_gold.yaml`, the hand-checked facts the eval scores against

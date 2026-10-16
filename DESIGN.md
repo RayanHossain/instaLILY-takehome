@@ -14,9 +14,9 @@ I assumed a new distributor entering the market, so every contractor is a prospe
 
 ## 2. What a rep gets
 
-![The lead list under the Balanced preset, with Eagle Express selected and its Why tab open](docs/app.png)
+![Top leads under the Balanced preset, on Eagle Express, with its brief, score, and notes side by side](docs/app.png)
 
-- **Who to call first:** a ranked list under the rep's chosen preset (Balanced, Big accounts or Quick wins), with the signals behind each score.
+- **Who to call first:** the app opens on the chosen preset's top 10 (Balanced, Big accounts or Quick wins), one lead at a time, with the signals behind each score. Every other contractor is a click away, ranked the same way.
 - **What to say:** for each preset's top 10, a brief with why this contractor, an opener, follow-ups, and questions about upcoming jobs.
 - **What we know:** facts from the contractor's GAF profile and website, each with the quote it came from: the ones a brief cites, or all of them for a lead without a brief.
 - **Where it stands:** a status on the ladder, notes, and a call sheet that logs a call in one step.
@@ -111,18 +111,20 @@ I chose Streamlit over React, NiceGUI and HTMX. Python is my strongest language,
 
 The principle is that a rep should know the next step within seconds of opening a lead. A review at laptop size shaped the layout:
 
-- One screen with no page scroll: the ranked table on the left, the selected lead on the right.
-- The table answers "who first?": it's sorted by score, with tags only for exceptions, like Top pick or New business.
-- The selected lead has three tabs: Why, Brief and Notes.
-- A filter counts leads by stage, so the list shrinks as the rep works.
+- The app opens on Top leads: one lead at a time from the chosen preset's top 10, with its brief, its score's reasons, and its notes side by side, so nothing hides behind a tab. Previous and Next step through the 10.
+- Top leads shows only leads with a brief, so every lead on it comes with a plan.
+- Tags name only exceptions: the presets whose top 10 a lead is in, a tier above Certified, or New business.
+- All leads, the second page, keeps every contractor: the ranked table on the left and the selected lead on the right, in tabs.
+- On All leads, a filter counts leads by stage, so the list shrinks as the rep works.
 - Search by name or phone doubles as a lookup when a contractor calls in.
 - A call sheet logs the outcome and opens the next lead.
+- Each page fits one laptop screen with no page scroll.
 
-![The call sheet for Eagle Express, open beside the lead list](docs/call-sheet.png)
+![The call sheet for Eagle Express, open beside the lead](docs/call-sheet.png)
 
 ## 5. How I built it
 
-I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 178 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
+I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 183 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
 
 ## 6. What I'd do with another 8 hours
 
