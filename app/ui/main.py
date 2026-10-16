@@ -18,7 +18,7 @@ DASH = "—"  # shown for a missing value
 # On All leads, each detail tab scrolls inside a bordered box of this height, with the scrollbar below.
 TAB_HEIGHT = 310
 # On Top leads, the brief, the score, and the notes sit side by side in bordered boxes this tall.
-TOP_BOX_HEIGHT = 470
+TOP_BOX_HEIGHT = 520
 # Streamlit keeps a scrolling container's scrollbar hidden until the mouse is over it, and
 # macOS hides it until you scroll, so a box cut off between two sections looked finished.
 # This keeps a scrollbar showing in the detail boxes whenever there's more below. It targets
