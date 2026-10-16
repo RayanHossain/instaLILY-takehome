@@ -100,8 +100,12 @@ def test_the_landing_page_shows_one_top_lead_with_its_brief(app: AppTest) -> Non
     assert app.header[0].value == "Top leads"
     assert not app.dataframe  # no table: one lead at a time
     assert shown_lead(app) == "Alpha Roofing"
-    assert app.caption[0].value == "Lead 1 of 2 from Balanced's top 10 · Status: **New**"
+    assert app.caption[0].value == "Lead 1 of 2 · Status: **New**"
     assert any("Atlantic Ave" in markdown.value for markdown in app.markdown)  # the brief, no tab to click
+    with pytest.raises(KeyError):
+        app.segmented_control(key="preset")  # no preset picker: the list covers every preset's top
+    # The Why box gives the total under each preset that picked the lead.
+    assert "Out of 100: **65** Balanced · **75** Big accounts · **58** Quick wins" in [markdown.value for markdown in app.markdown]
     # Alpha is in every preset's top 10, so it carries every preset's name as a tag.
     assert [markdown.value for markdown in app.markdown if "orange-badge" in markdown.value] == [
         ":orange-badge[Balanced]",
@@ -135,7 +139,7 @@ def test_logging_a_call_on_the_landing_page_opens_the_next_top_lead(app: AppTest
     assert any(button.label == "Log call" for button in app.button)  # Beta's call sheet is open
     # Alpha stays on the page, now Contacted.
     labelled(app, "Previous").click().run()
-    assert app.caption[0].value == "Lead 1 of 2 from Balanced's top 10 · Status: **Contacted**"
+    assert app.caption[0].value == "Lead 1 of 2 · Status: **Contacted**"
 
 
 def test_the_all_leads_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
@@ -183,9 +187,9 @@ def test_the_selected_lead_survives_a_preset_switch_that_re_sorts_the_table(app:
     assert app.session_state["lead_table"]["selection"]["rows"] == [1]  # Quick wins: Beta, Gamma, Alpha
 
 
-def test_a_link_with_a_preset_opens_the_page_ranked_by_it(app: AppTest) -> None:
+def test_a_link_with_a_preset_opens_all_leads_ranked_by_it(app: AppTest) -> None:
     app.query_params["preset"] = "Quick wins"
-    app.run()
+    open_all_leads(app)
 
     assert app.segmented_control(key="preset").value == "Quick wins"
     assert shown_lead(app) == "Beta Roofing"  # the top lead under Quick wins
@@ -238,14 +242,14 @@ def test_a_save_that_moves_the_lead_out_of_the_filter_moves_the_panel_to_the_top
 
 
 def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, session: Session) -> None:
-    app.run()
+    open_all_leads(app)
     assert app.sidebar.caption[0].value == "Signed in as **Demo Rep**"
 
     app.segmented_control(key="preset").set_value("Big accounts").run()
 
     session.expire_all()
     assert session.get(Rep, 1).preset == "Big accounts"
-    next_visit = AppTest.from_file(str(ENTRY_POINT), default_timeout=30).run()
+    next_visit = open_all_leads(AppTest.from_file(str(ENTRY_POINT), default_timeout=30))
     assert next_visit.segmented_control(key="preset").value == "Big accounts"
 
 

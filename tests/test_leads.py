@@ -227,20 +227,36 @@ def test_a_preset_tag_names_only_the_presets_whose_top_n_the_lead_is_in(session:
     assert tags == {"big": ["Balanced", "Big accounts"], "quick": ["Quick wins"]}
 
 
-def test_briefed_top_leads_keeps_the_presets_top_n_that_have_a_brief(session: Session) -> None:
+def test_briefed_top_leads_keeps_the_top_n_leads_that_have_a_brief(session: Session) -> None:
     run = make_run(session)
-    for gaf_id, points in [("first", 90), ("unbriefed", 80), ("third", 70), ("outside", 60)]:
+    for gaf_id, points in [("third", 70), ("unbriefed", 80), ("first", 90), ("outside", 60)]:
         add_contractor(session, run, gaf_id)
         add_score(session, gaf_id, points)
     add_brief(session, "first")
     add_brief(session, "third")
     add_brief(session, "outside")  # written under older rules, when it was in a top N
 
-    leads = briefed_top_leads(session, "Quick wins", top_n=3)
+    leads = briefed_top_leads(session, top_n=3)
 
     # unbriefed is in the top 3 but has no brief; outside has a brief but isn't in the top 3.
-    assert ids(leads) == ["first", "third"]
+    assert ids(leads) == ["first", "third"]  # in as many tops, so the higher total first
     assert leads[0].tags == ["Balanced", "Big accounts", "Quick wins"]
+
+
+def test_briefed_top_leads_puts_leads_in_more_presets_tops_first(session: Session) -> None:
+    run = make_run(session)
+    add_contractor(session, run, "steady")
+    add_contractor(session, run, "quick")
+    add_score(session, "steady", 60)  # 60 under every preset
+    # quick scores 50 Balanced, 30 Big accounts, 75 Quick wins: only Quick wins' top 1.
+    session.add(Score(contractor_id="quick", value=0, winnability=100, stability=0, distance=100, flags=[], reasons={}, rules_version="test"))
+    add_brief(session, "steady")
+    add_brief(session, "quick")
+
+    leads = briefed_top_leads(session, top_n=1)
+
+    # steady tops two presets, so it comes first, though quick's 75 beats its 60.
+    assert [(lead.gaf_id, lead.tags) for lead in leads] == [("steady", ["Balanced", "Big accounts"]), ("quick", ["Quick wins"])]
 
 
 def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> None:
@@ -257,6 +273,7 @@ def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> No
     star = get_lead(session, "star", top_n=1)
     assert star.brief is not None
     assert star.top_presets == ["Balanced", "Big accounts", "Quick wins"]
+    assert star.totals == {"Balanced": 90, "Big accounts": 90, "Quick wins": 90}
     fallen = get_lead(session, "fallen", top_n=1)
     assert fallen.brief is None
     assert fallen.top_presets == []

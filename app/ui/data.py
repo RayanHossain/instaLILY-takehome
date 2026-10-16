@@ -96,14 +96,14 @@ def list_leads(search: str, tiers: list[str], max_miles: float, preset: str) -> 
         )
 
 
-def briefed_top_leads(preset: str) -> list[LeadRow]:
-    """The Top leads page's leads: the preset's top N that have a brief, highest total first."""
+def briefed_top_leads() -> list[LeadRow]:
+    """The Top leads page's leads: every lead in a preset's top N that has a brief, those in the most tops first."""
     with _open_session() as session:
-        return leads.briefed_top_leads(session, preset, Settings().top_leads_per_preset)
+        return leads.briefed_top_leads(session, Settings().top_leads_per_preset)
 
 
-def get_lead(gaf_id: str, preset: str) -> LeadDetail:
-    """The detail panel's data for one contractor, scored under the preset."""
+def get_lead(gaf_id: str, preset: str | None = None) -> LeadDetail:
+    """The detail panel's data for one contractor, scored under the preset (None: the default preset)."""
     with _open_session() as session:
         return leads.get_lead(session, gaf_id, preset=preset, top_n=Settings().top_leads_per_preset)
 

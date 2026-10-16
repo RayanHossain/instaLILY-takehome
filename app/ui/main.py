@@ -2,8 +2,8 @@
 
 streamlit_app.py at the repo root calls main() on every rerun:
     streamlit run streamlit_app.py
-main() draws what both pages share, then runs the page the rep is on; each page's file in
-app_pages/ calls its function here. Every read goes through app/ui/data.py. Each page fits
+main() draws the sidebar both pages share, then runs the page the rep is on; each page's
+file in app_pages/ calls its function here. Every read goes through app/ui/data.py. Each page fits
 one 1440x900 laptop screen: the table and the detail boxes scroll on their own, so the page
 never does.
 """
@@ -171,15 +171,27 @@ def show_header(lead: data.LeadDetail) -> bool:
     return called
 
 
-def show_why(lead: data.LeadDetail, weights: data.Preset) -> None:
-    """The Why tab: the total, each component as a bar with its weight, and the signals behind it."""
+def show_why(lead: data.LeadDetail, weights: data.Preset | None) -> None:
+    """The Why box: the total, each component as a bar, and the signals behind it.
+
+    Args:
+        lead: The lead to explain.
+        weights: The picked preset's weights, on All leads: the total is under that preset,
+            and each bar says its share. None on Top leads, which has no picker: it shows
+            the total under each preset whose top N the lead is in, since the components
+            are the same under every preset and only the weights change.
+    """
     if lead.score is None or lead.reasons is None:
         st.caption("Not scored yet.")
         return
-    st.markdown(f"**{lead.score.total:.0f}** out of 100 under {lead.score.preset}")
+    if weights:
+        st.markdown(f"**{lead.score.total:.0f}** out of 100 under {lead.score.preset}")
+    else:
+        st.markdown("Out of 100: " + " · ".join(f"**{lead.totals[name]:.0f}** {name}" for name in lead.top_presets))
     for component, signals in lead.reasons.items():
         points = getattr(lead.score, component)
-        st.progress(round(points), text=f"{component.capitalize()} {points:.0f} · {getattr(weights, component)}% of the score")
+        share = f" · {getattr(weights, component)}% of the score" if weights else ""
+        st.progress(round(points), text=f"{component.capitalize()} {points:.0f}{share}")
         # A guess is greyed out: its data was missing, so it scored the neutral middle.
         st.caption(" · ".join(f":gray[{plain(signal.input)}]" if signal.guess else plain(signal.input) for signal in signals))
     st.caption(":gray[Grey: no data, so a neutral 50.]")
@@ -260,37 +272,39 @@ def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
 
 
 def top_leads_page() -> None:
-    """The landing page: the preset's top leads that have a brief, one at a time, with its brief, score, and notes side by side.
+    """The landing page: every lead in a preset's top N that has a brief, one at a time, with its brief, score, and notes side by side.
 
-    Previous (K) and Next (J) step through them, highest total first, and Log call opens
-    the next one. Every lead stays on the page whatever its status.
+    Previous (K) and Next (J) step through them: the leads every preset picks first, and
+    each lead's tags say which presets picked it. Log call opens the next one. Every lead
+    stays on the page whatever its status.
     """
-    scoring = data.load_scoring_config()
     rep = data.current_rep()
-    preset = st.session_state.preset  # main() draws the preset picker
-    leads = data.briefed_top_leads(preset)
+    leads = data.briefed_top_leads()
     if not leads:
-        st.info(f"None of {preset}'s top leads has a brief yet. Run the brief stage, or look through All leads.")
+        st.header("Top leads", anchor=False)
+        st.info("No top lead has a brief yet. Run the brief stage, or look through All leads.")
         return
 
-    # This page keeps its own selected lead, apart from the All leads table's. A preset switch
-    # keeps the lead when it's in the new preset's list too; otherwise the page starts at the top.
     ids = [lead.gaf_id for lead in leads]
     st.session_state.shown_ids = ids
+    # This page keeps its own selected lead, apart from the All leads table's.
     if st.session_state.get("top_lead_id") not in ids:
         st.session_state.top_lead_id = ids[0]
     position = ids.index(st.session_state.top_lead_id)
     next_id = ids[position + 1] if position + 1 < len(ids) else None
-    status = data.current_statuses(rep.id, ids)[st.session_state.top_lead_id]
 
     with st.container(horizontal=True, vertical_alignment="center"):
-        top_n = data.top_leads_per_preset()
-        st.caption(f"Lead {position + 1} of {len(ids)} from {preset}'s top {top_n} · Status: **{status}**")
+        st.header("Top leads", anchor=False, width="content")
         st.space("stretch")
         st.button("Previous", icon=":material/arrow_back:", shortcut="K", disabled=position == 0, on_click=step_lead, args=("top_lead_id", -1))
         st.button("Next", icon=":material/arrow_forward:", shortcut="J", disabled=next_id is None, on_click=step_lead, args=("top_lead_id", 1))
 
-    lead = data.get_lead(st.session_state.top_lead_id, preset)
+    status = data.current_statuses(rep.id, ids)[st.session_state.top_lead_id]
+    top_n = data.top_leads_per_preset()
+    order = f"Every lead in a preset's top {top_n} that has a brief. Leads more presets pick come first, then the highest total."
+    st.caption(f"Lead {position + 1} of {len(ids)} · Status: **{status}**", help=order)
+
+    lead = data.get_lead(st.session_state.top_lead_id)
     if show_header(lead) or st.session_state.pop("call_next", False):
         call_sheet(rep.id, lead, status, next_id, "top_lead_id")
 
@@ -303,7 +317,7 @@ def top_leads_page() -> None:
     with why_column:
         st.markdown("**Why**")
         with st.container(height=TOP_BOX_HEIGHT, border=True, key="why_box"):
-            show_why(lead, scoring.presets[preset])
+            show_why(lead, None)
     with notes_column:
         st.markdown("**Notes**")
         with st.container(height=TOP_BOX_HEIGHT, border=True, key="notes_box"):
@@ -311,12 +325,28 @@ def top_leads_page() -> None:
 
 
 def all_leads_page() -> None:
-    """The All leads page: sidebar filters, the status filter, the lead table, and the selected lead."""
+    """The All leads page: the preset picker, sidebar filters, the status filter, the lead table, and the selected lead."""
     territory = data.load_territory()
     radius = int(territory["radius_miles"])
     scoring = data.load_scoring_config()
     rep = data.current_rep()
-    preset = st.session_state.preset  # main() draws the preset picker
+
+    title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
+    title_column.header("All leads", anchor=False)
+    with preset_column:
+        # Starts on the rep's saved preset. required: a second click can't unselect it.
+        # bind: ?preset=Quick+wins in the URL deep-links to a preset.
+        preset = st.segmented_control(
+            "Rank by",
+            list(scoring.presets),
+            default=rep.preset if rep.preset in scoring.presets else scoring.default_preset,
+            required=True,
+            key="preset",
+            bind="query-params",
+            on_change=save_preset_choice,
+            args=(rep.id,),
+            label_visibility="collapsed",
+        )
 
     # live: the table filters as the rep types. type="search" adds a clear button.
     search = st.sidebar.text_input("Search", placeholder="Name or phone", type="search", live=True)
@@ -408,7 +438,7 @@ def all_leads_page() -> None:
 
 
 def main() -> None:
-    """Draw what both pages share (the sidebar's name and rep, the page title, and the preset picker), then run the rep's page.
+    """Draw the sidebar both pages share (the page links, the app's name, and the rep), then run the rep's page.
 
     Top leads is the landing page. Each page's file in app_pages/ calls its function above.
     """
@@ -416,7 +446,6 @@ def main() -> None:
     if data.database_missing():
         st.error("No database yet. From the repo root, run: `mkdir -p data && cp seed/leads.db data/leads.db`")
         st.stop()
-    scoring = data.load_scoring_config()
     rep = data.current_rep()
 
     page = st.navigation(
@@ -427,21 +456,4 @@ def main() -> None:
     )
     st.sidebar.subheader("Ridgeline Leads", anchor=False)
     st.sidebar.caption(f"Signed in as **{rep.name}**")
-
-    title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
-    title_column.header(page.title, anchor=False)
-    with preset_column:
-        # Starts on the rep's saved preset. required: a second click can't unselect it.
-        # bind: ?preset=Quick+wins in the URL deep-links to a preset.
-        st.segmented_control(
-            "Rank by",
-            list(scoring.presets),
-            default=rep.preset if rep.preset in scoring.presets else scoring.default_preset,
-            required=True,
-            key="preset",
-            bind="query-params",
-            on_change=save_preset_choice,
-            args=(rep.id,),
-            label_visibility="collapsed",
-        )
     page.run()

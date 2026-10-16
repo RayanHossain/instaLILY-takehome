@@ -100,6 +100,7 @@ class LeadDetail(BaseModel):
     score: LeadScore | None
     reasons: dict[str, list[Signal]] | None  # each component's signals; None until scored
     top_presets: list[str]  # the presets whose top N it's in under the current scores, shown as tags
+    totals: dict[str, float]  # its total under each preset, by name; empty until scored
     brief: Brief | None  # its latest brief, only while it's in a preset's top N
     facts: list[LeadFact]  # every fact extracted about it; a brief cites some of them by id
 
@@ -164,20 +165,25 @@ def list_leads(
     return leads
 
 
-def briefed_top_leads(session: Session, preset: str | None, top_n: int) -> list[LeadRow]:
-    """The preset's top_n leads that have a brief, highest total first, with their tags.
+def briefed_top_leads(session: Session, top_n: int) -> list[LeadRow]:
+    """Every lead in any preset's top_n that has a brief, with its tags: the leads Top leads steps through.
 
-    These are the leads the Top leads page steps through. A top lead whose brief hasn't
-    been written yet is left out, so the list can be shorter than top_n.
-
-    Raises:
-        ValueError: The preset isn't one in config/scoring.yaml.
+    Leads in the most presets' tops come first, so the ones every preset picks lead the
+    list. Among leads in as many tops, the highest total under any of its presets comes
+    first. A top lead whose brief hasn't been written yet is left out.
     """
-    preset_name, _ = _preset(preset)
+    presets = scoring.load_scoring_config().presets
     briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
-    leads = list_leads(session, preset=preset_name, sort="total", top_n=top_n)
-    # A lead carries the preset's name as a tag exactly when it's in the preset's top_n.
-    return [lead for lead in leads if preset_name in lead.tags and lead.gaf_id in briefed]
+    scores = {score.contractor_id: score for score in session.scalars(select(Score))}
+    ranked = []  # (how many tops it's in, its best total, the lead)
+    for lead in list_leads(session, top_n=top_n):
+        # A lead carries a preset's name as a tag exactly when it's in that preset's top_n.
+        top_presets = [tag for tag in lead.tags if tag in presets]
+        if top_presets and lead.gaf_id in briefed:
+            best_total = max(scoring.total(scores[lead.gaf_id], presets[name]) for name in top_presets)
+            ranked.append((len(top_presets), best_total, lead))
+    ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    return [lead for _, _, lead in ranked]
 
 
 def all_tags() -> list[str]:
@@ -271,7 +277,7 @@ def _tags(lead: LeadRow, top: dict[str, list[str]]) -> list[str]:
 
 
 def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: int = 10) -> LeadDetail:
-    """Return the details of one contractor: its scores under the preset, their reasons, its brief, and its facts.
+    """Return the details of one contractor: its scores under the preset, its total under every preset, their reasons, its brief, and its facts.
 
     A brief is written for each preset's top_n leads. One written under older rules stays
     stored, but is returned only while its lead is in a top_n under the current scores.
@@ -287,6 +293,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
     score = session.get(Score, gaf_id)
     stored_brief = session.get(ContractorBrief, gaf_id)
     top_presets = [name for name, ids in top_leads(session, top_n).items() if gaf_id in ids]
+    presets = scoring.load_scoring_config().presets
+    totals = {name: scoring.total(score, preset_weights) for name, preset_weights in presets.items()} if score else {}
     facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id))
     founded_year, _ = scoring.founding_year(contractor.in_business_since)
 
@@ -310,6 +318,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
         score=_lead_score(score, preset_name, weights),
         reasons={component: [Signal(**signal) for signal in signals] for component, signals in score.reasons.items()} if score else None,
         top_presets=top_presets,
+        totals=totals,
         brief=Brief.model_validate(stored_brief.content) if stored_brief and top_presets else None,
         facts=[
             LeadFact(id=fact.id, field=fact.field, value=fact.value, quote=fact.evidence, source=fact.source, source_url=fact.source_url)
