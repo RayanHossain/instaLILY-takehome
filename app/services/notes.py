@@ -26,9 +26,10 @@ STATUS_GROUPS = {
 
 
 class Note(BaseModel):
-    """One saved note: the status it set, its text, and when."""
+    """One saved note: the status it set, the status it moved the lead from, its text, and when."""
 
     status: str
+    previous_status: str  # the lead's status before this note: the next older note's, or New
     text: str  # empty when the rep only changed the status
     created_at: datetime  # in UTC
 
@@ -51,13 +52,18 @@ def current_statuses(session: Session, rep_id: int, contractor_ids: list[str]) -
 
 
 def lead_notes(session: Session, rep_id: int, contractor_id: str) -> list[Note]:
-    """This rep's notes on one lead, newest first."""
+    """This rep's notes on one lead, newest first, each with the status it moved the lead from."""
     notes = session.scalars(
         select(LeadNote)
         .where(LeadNote.rep_id == rep_id, LeadNote.contractor_id == contractor_id)
         .order_by(LeadNote.created_at.desc(), LeadNote.id.desc())
-    )
-    return [Note(status=note.status, text=note.text, created_at=_in_utc(note.created_at)) for note in notes]
+    ).all()
+    # Newest first, so each note's previous status is the next note's; the oldest moved it from New.
+    previous = [note.status for note in notes[1:]] + ["New"]
+    return [
+        Note(status=note.status, previous_status=before, text=note.text, created_at=_in_utc(note.created_at))
+        for note, before in zip(notes, previous)
+    ]
 
 
 def add_note(session: Session, rep_id: int, contractor_id: str, status: str, text: str) -> None:

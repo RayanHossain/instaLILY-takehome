@@ -29,9 +29,9 @@ def test_a_lead_with_no_notes_is_new_and_the_newest_note_sets_the_status(session
     session.commit()
 
     assert current_statuses(session, 1, ["a", "b"]) == {"a": "Considering us", "b": "New"}
-    assert [(note.status, note.text) for note in lead_notes(session, 1, "a")] == [
-        ("Considering us", "Asked for a quote."),  # newest first, trimmed
-        ("Contacted", "Left a voicemail."),
+    assert [(note.previous_status, note.status, note.text) for note in lead_notes(session, 1, "a")] == [
+        ("Contacted", "Considering us", "Asked for a quote."),  # newest first, trimmed
+        ("New", "Contacted", "Left a voicemail."),
     ]
     assert lead_notes(session, 1, "a")[0].created_at.tzinfo is not None
 
