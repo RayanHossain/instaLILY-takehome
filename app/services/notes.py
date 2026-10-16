@@ -15,8 +15,14 @@ from app.db.models import LeadNote
 
 # The statuses, in ladder order. "Considering us": asked for pricing or a quote.
 STATUSES = ["New", "Contacted", "Considering us", "First order", "Not a fit"]
-# The groups the lead list filters by, and the statuses in each.
-STATUS_GROUPS = {"To contact": ["New"], "In progress": ["Contacted", "Considering us"], "Closed": ["First order", "Not a fit"]}
+# The groups the lead list filters by, and the statuses in each. A first order and "Not a
+# fit" get a group each: one is a win and the other a dead end, so a rep looks for them apart.
+STATUS_GROUPS = {
+    "To contact": ["New"],
+    "In progress": ["Contacted", "Considering us"],
+    "First order": ["First order"],
+    "Not a fit": ["Not a fit"],
+}
 
 
 class Note(BaseModel):

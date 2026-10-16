@@ -9,7 +9,7 @@ from streamlit.testing.v1 import AppTest
 from streamlit.testing.v1.element_tree import Button
 
 from app.db.models import Contractor, ContractorBrief, Fact, Rep, Run, Score
-from app.services.notes import lead_notes
+from app.services.notes import add_note, lead_notes
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
@@ -251,6 +251,19 @@ def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, s
     assert session.get(Rep, 1).preset == "Big accounts"
     next_visit = open_all_leads(AppTest.from_file(str(ENTRY_POINT), default_timeout=30))
     assert next_visit.segmented_control(key="preset").value == "Big accounts"
+
+
+def test_first_orders_and_leads_not_a_fit_each_have_their_own_filter(app: AppTest, session: Session) -> None:
+    add_note(session, 1, "1", "First order", "Ordered shingles for a Park Slope job.")
+    add_note(session, 1, "3", "Not a fit", "Commercial work only.")
+    session.commit()
+    open_all_leads(app)
+
+    app.segmented_control(key="status_group").set_value("First order").run()
+    assert list(app.dataframe[0].value["Contractor"]) == ["Alpha Roofing"]
+
+    app.segmented_control(key="status_group").set_value("Not a fit").run()
+    assert list(app.dataframe[0].value["Contractor"]) == ["Gamma Roofing"]
 
 
 def test_the_header_links_the_website_only_when_there_is_one(app: AppTest) -> None:

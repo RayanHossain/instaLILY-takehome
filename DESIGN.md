@@ -124,7 +124,7 @@ The principle is that a rep should know the next step within seconds of opening 
 
 ## 5. How I built it
 
-I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 185 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
+I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 186 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
 
 ## 6. What I'd do with another 8 hours
 

@@ -325,15 +325,16 @@ def top_leads_page() -> None:
 
 
 def all_leads_page() -> None:
-    """The All leads page: the preset picker, sidebar filters, the status filter, the lead table, and the selected lead."""
+    """The All leads page: the preset picker and Previous/Next, sidebar filters, the status filter, the lead table, and the selected lead."""
     territory = data.load_territory()
     radius = int(territory["radius_miles"])
     scoring = data.load_scoring_config()
     rep = data.current_rep()
 
-    title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
-    title_column.header("All leads", anchor=False)
-    with preset_column:
+    # The title row: the preset picker, then Previous and Next, in the same corner as on Top leads.
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.header("All leads", anchor=False, width="content")
+        st.space("stretch")
         # Starts on the rep's saved preset. required: a second click can't unselect it.
         # bind: ?preset=Quick+wins in the URL deep-links to a preset.
         preset = st.segmented_control(
@@ -347,6 +348,8 @@ def all_leads_page() -> None:
             args=(rep.id,),
             label_visibility="collapsed",
         )
+        st.button("Previous", icon=":material/keyboard_arrow_up:", shortcut="K", on_click=step_lead, args=("lead_id", -1))
+        st.button("Next", icon=":material/keyboard_arrow_down:", shortcut="J", on_click=step_lead, args=("lead_id", 1))
 
     # live: the table filters as the rep types. type="search" adds a clear button.
     search = st.sidebar.text_input("Search", placeholder="Name or phone", type="search", live=True)
@@ -362,19 +365,15 @@ def all_leads_page() -> None:
     with table_column:
         statuses = data.current_statuses(rep.id, [lead.gaf_id for lead in leads])
         counts = {group: sum(data.status_group(statuses[lead.gaf_id]) == group for lead in leads) for group in data.STATUS_GROUPS}
-        with st.container(horizontal=True, vertical_alignment="center"):
-            group = st.segmented_control(
-                "Status",
-                [*data.STATUS_GROUPS, "All"],
-                default="To contact",
-                required=True,
-                key="status_group",
-                format_func=lambda option: f"{option} {counts[option]}" if option in counts else option,
-                label_visibility="collapsed",
-            )
-            st.space("stretch")
-            st.button("Previous", icon=":material/keyboard_arrow_up:", shortcut="K", type="tertiary", on_click=step_lead, args=("lead_id", -1))
-            st.button("Next", icon=":material/keyboard_arrow_down:", shortcut="J", type="tertiary", on_click=step_lead, args=("lead_id", 1))
+        group = st.segmented_control(
+            "Status",
+            [*data.STATUS_GROUPS, "All"],
+            default="To contact",
+            required=True,
+            key="status_group",
+            format_func=lambda option: f"{option} {counts[option]}" if option in counts else option,
+            label_visibility="collapsed",
+        )
         leads = [lead for lead in leads if group == "All" or data.status_group(statuses[lead.gaf_id]) == group]
         if not leads:
             st.info("No leads here. Try another status, search, or wider filters.")

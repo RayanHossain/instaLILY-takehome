@@ -57,8 +57,8 @@ def test_each_status_belongs_to_one_group() -> None:
         "To contact",
         "In progress",
         "In progress",
-        "Closed",
-        "Closed",
+        "First order",
+        "Not a fit",
     ]
 
 
