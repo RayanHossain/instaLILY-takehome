@@ -210,35 +210,22 @@ def test_a_lead_with_a_brief_shows_its_opener(app: AppTest) -> None:
     assert any("Atlantic Ave" in markdown.value for markdown in app.tabs[1].markdown)
 
 
-def save_status(app: AppTest, status: str, note: str) -> None:
-    """Fill in the Notes tab's form and save it."""
-    gaf_id = app.session_state["lead_id"]
-    app.segmented_control(key=f"status_{gaf_id}").set_value(status)
-    app.text_area(key=f"note_{gaf_id}").set_value(note)
-    app.form_submit_button[0].click().run()
-
-
-def test_the_selected_lead_survives_a_saved_status(app: AppTest) -> None:
-    app.session_state["lead_id"] = "3"
+def test_the_notes_tab_shows_each_status_change_in_color(app: AppTest, session: Session) -> None:
+    add_note(session, 1, "3", "Contacted", "Left a voicemail.")
+    add_note(session, 1, "3", "Considering us", "Asked for a quote.")
+    session.commit()
     open_all_leads(app)
     app.segmented_control(key="status_group").set_value("All").run()
+    app.session_state["lead_id"] = "3"  # Gamma is In progress now, so pick it once All shows it
+    app.run()
 
-    save_status(app, "Contacted", "Left a voicemail.")
+    history = [markdown.value for markdown in app.tabs[2].markdown]
 
-    assert shown_lead(app) == "Gamma Roofing"
-    assert [toast.value for toast in app.toast] == ["Saved: Gamma Roofing"]
-    assert any("Left a voicemail" in markdown.value for markdown in app.tabs[2].markdown)
-
-
-def test_a_save_that_moves_the_lead_out_of_the_filter_moves_the_panel_to_the_top_lead(app: AppTest) -> None:
-    app.session_state["lead_id"] = "3"
-    open_all_leads(app)  # To contact: every lead is New
-
-    save_status(app, "Considering us", "Asked for a quote.")
-
-    assert shown_lead(app) == "Alpha Roofing"
-    assert [toast.value for toast in app.toast] == ["Saved: Gamma Roofing is now In progress"]
-    assert len(app.dataframe[0].value) == 2
+    # Newest first: each note's change of status as colored badges, then its text.
+    assert history[0].startswith(":blue-badge[Contacted] → :violet-badge[Considering us]")
+    assert "Asked for a quote" in history[1]
+    assert history[2].startswith(":gray-badge[New] → :blue-badge[Contacted]")
+    assert "Left a voicemail" in history[3]
 
 
 def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, session: Session) -> None:
@@ -298,11 +285,13 @@ def test_next_and_previous_move_down_and_up_the_table(app: AppTest) -> None:
     assert shown_lead(app) == "Alpha Roofing"
 
 
-def test_the_call_sheet_starts_on_the_leads_current_status(app: AppTest) -> None:
-    app.session_state["lead_id"] = "3"
+def test_the_call_sheet_starts_on_the_leads_current_status(app: AppTest, session: Session) -> None:
+    add_note(session, 1, "3", "Considering us", "Asked for a quote.")
+    session.commit()
     open_all_leads(app)
     app.segmented_control(key="status_group").set_value("All").run()
-    save_status(app, "Considering us", "Asked for a quote.")
+    app.session_state["lead_id"] = "3"  # Gamma is In progress now, so pick it once All shows it
+    app.run()
 
     labelled(app, "Call").click().run()
 

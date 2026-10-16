@@ -54,6 +54,9 @@ TAG_COLORS = {
     "New business": "rgba(33, 160, 90, 0.3)",
     "Low rating": "rgba(220, 53, 69, 0.35)",
 }
+# Each status's color, from st.badge's palette. The status pickers, the current status, and the
+# history all use it, so a status looks the same everywhere.
+STATUS_COLORS = {"New": "gray", "Contacted": "blue", "Considering us": "violet", "First order": "green", "Not a fit": "red"}
 
 
 def plain(text: str) -> str:
@@ -65,6 +68,22 @@ def call_link(phone: str) -> str:
     """The phone number as a Markdown tap-to-call link."""
     digits = re.sub(r"\D", "", phone)
     return f":material/call: [{plain(phone)}](tel:+1{digits[-10:]})"
+
+
+def status_badge(status: str) -> str:
+    """The status as a Markdown badge in its color: on the call sheet's outcome buttons, at the top of a lead, and in the history."""
+    return f":{STATUS_COLORS[status]}-badge[{status}]"
+
+
+def show_history(notes: list[data.Note]) -> None:
+    """A lead's notes, newest first: the status each one moved the lead from and to, when, and its text."""
+    for note in notes:
+        change = status_badge(note.status)
+        if note.previous_status != note.status:
+            change = f"{status_badge(note.previous_status)} → {change}"
+        st.markdown(f"{change} :gray[{note.created_at.astimezone():%b %d, %H:%M}]")
+        if note.text:
+            st.markdown(plain(note.text))
 
 
 def remember_pick() -> None:
@@ -91,7 +110,6 @@ def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None, selected_
     """Save the call sheet's outcome and note through the services, then queue the next lead's call sheet."""
     outcome = st.session_state[f"outcome_{gaf_id}"]
     data.add_note(rep_id, gaf_id, outcome, st.session_state[f"call_note_{gaf_id}"])
-    st.session_state.pop(f"status_{gaf_id}", None)  # the Notes picker starts on the new status
     st.toast(f"Logged: {name} is now {outcome}")
     if next_id:
         st.session_state[selected_key] = next_id
@@ -100,7 +118,7 @@ def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None, selected_
 
 @st.dialog("Call sheet", width="medium", position="right")
 def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | None, selected_key: str) -> None:
-    """The call sheet, a drawer beside the page: the opener, questions to tick off, follow-ups, and the outcome.
+    """The call sheet, a drawer beside the page: the opener, questions to tick off, follow-ups, the outcome, and the history.
 
     "Log call" (Cmd+Enter) saves the outcome and note through the services, then opens
     the next lead's call sheet. selected_key is the page's selected-lead key, which
@@ -121,12 +139,18 @@ def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | N
 
     # Starts on the lead's current status, so logging a call never moves it back down the ladder.
     outcome = "Contacted" if status == "New" else status
-    st.segmented_control("Outcome", data.STATUSES[1:], default=outcome, required=True, key=f"outcome_{lead.gaf_id}")
+    st.segmented_control(
+        "Outcome", data.STATUSES[1:], default=outcome, required=True, format_func=status_badge, key=f"outcome_{lead.gaf_id}"
+    )
     st.text_area("Note", key=f"call_note_{lead.gaf_id}", placeholder="What did they say?")
     # log_call saves before anything redraws; the rerun then closes this sheet and redraws the page.
     log_args = (rep_id, lead.gaf_id, lead.name, next_id, selected_key)
     if st.button("Log call", key=f"log_{lead.gaf_id}", type="primary", shortcut="Cmd+Enter", on_click=log_call, args=log_args):
         st.rerun()
+    notes = data.lead_notes(rep_id, lead.gaf_id)
+    if notes:
+        st.markdown("**History**")
+        show_history(notes)
 
 
 def show_header(lead: data.LeadDetail) -> bool:
@@ -240,35 +264,15 @@ def save_preset_choice(rep_id: int) -> None:
     data.save_preset(rep_id, st.session_state.preset)
 
 
-def save_note(rep_id: int, gaf_id: str, name: str) -> None:
-    """Save the Notes form: a note that sets the lead's status. Then say where the lead went.
+def show_notes(rep_id: int, lead: data.LeadDetail) -> None:
+    """The Notes tab: the lead's history, newest first. The call sheet is where a call or note is logged.
 
-    It runs as the form's callback, before the page redraws, so the page already shows the save.
+    Logging lives on the call sheet only, because it's wide enough to show every status on one line.
     """
-    status = st.session_state[f"status_{gaf_id}"]
-    data.add_note(rep_id, gaf_id, status, st.session_state[f"note_{gaf_id}"])
-    st.session_state[f"note_{gaf_id}"] = ""
-    st.session_state.pop(f"outcome_{gaf_id}", None)  # the call sheet's outcome starts on the new status
-    group = data.status_group(status)
-    # Top leads has no status filter, so every lead stays on it.
-    if st.session_state.get("status_group", "All") in (group, "All"):
-        st.toast(f"Saved: {name}")
-    else:  # the lead leaves the All leads table, so the panel moves to the top lead
-        st.toast(f"Saved: {name} is now {group}")
-
-
-def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
-    """The Notes tab: a status picker and a note box, then the history, newest first."""
-    with st.form(f"notes_{lead.gaf_id}", border=False):
-        st.segmented_control(
-            "Status", data.STATUSES, default=status, required=True, key=f"status_{lead.gaf_id}", label_visibility="collapsed"
-        )
-        st.text_area("Note", key=f"note_{lead.gaf_id}", placeholder="What happened?", height=68, label_visibility="collapsed")
-        st.form_submit_button("Save", on_click=save_note, args=(rep_id, lead.gaf_id, lead.name))
-    for note in data.lead_notes(rep_id, lead.gaf_id):
-        st.markdown(f"**{note.status}** :gray[· {note.created_at.astimezone():%b %d, %H:%M}]")
-        if note.text:
-            st.markdown(plain(note.text))
+    notes = data.lead_notes(rep_id, lead.gaf_id)
+    if not notes:
+        st.caption("No notes yet. Log a call or a note with Call.")
+    show_history(notes)
 
 
 def top_leads_page() -> None:
@@ -321,7 +325,7 @@ def top_leads_page() -> None:
     with notes_column:
         st.markdown("**Notes**")
         with st.container(height=TOP_BOX_HEIGHT, border=True, key="notes_box"):
-            show_notes(rep.id, lead, status)
+            show_notes(rep.id, lead)
 
 
 def all_leads_page() -> None:
@@ -433,7 +437,7 @@ def all_leads_page() -> None:
                 show_brief(lead)
         with notes_tab:
             with st.container(height=TAB_HEIGHT, border=True, key="notes_box"):
-                show_notes(rep.id, lead, statuses[lead.gaf_id])
+                show_notes(rep.id, lead)
 
 
 def main() -> None:
