@@ -301,7 +301,7 @@ def top_leads_page() -> None:
 
     status = data.current_statuses(rep.id, ids)[st.session_state.top_lead_id]
     top_n = data.top_leads_per_preset()
-    order = f"Every lead in a preset's top {top_n} that has a brief. Leads more presets pick come first, then the highest total."
+    order = f"Every lead in a preset's top {top_n} that has a brief. Leads more presets pick come first, then the ones placed highest in a preset."
     st.caption(f"Lead {position + 1} of {len(ids)} · Status: **{status}**", help=order)
 
     lead = data.get_lead(st.session_state.top_lead_id)

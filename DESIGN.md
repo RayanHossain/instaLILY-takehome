@@ -111,7 +111,7 @@ I chose Streamlit over React, NiceGUI and HTMX. Python is my strongest language,
 
 The principle is that a rep should know the next step within seconds of opening a lead. A review at laptop size shaped the layout:
 
-- The app opens on Top leads: one lead at a time from every preset's top 10, with its brief, its score's reasons, and its notes side by side, so nothing hides behind a tab. Previous and Next step through them, and the leads more presets pick come first, so the rep has no preset to choose.
+- The app opens on Top leads: one lead at a time from every preset's top 10, with its brief, its score's reasons, and its notes side by side, so nothing hides behind a tab. Previous and Next step through them: the leads more presets pick come first, then the ones placed highest in a preset, so the rep has no preset to choose.
 - Top leads shows only leads with a brief, so every lead on it comes with a plan.
 - Tags name only exceptions: the presets whose top 10 a lead is in, a tier above Certified, or New business.
 - All leads, the second page, keeps every contractor: the table, ranked by the preset the rep picks, on the left and the selected lead on the right, in tabs.
@@ -124,7 +124,7 @@ The principle is that a rep should know the next step within seconds of opening 
 
 ## 5. How I built it
 
-I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 184 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
+I built the system in nine slices with Claude Code, checking each against its brief and the tests before starting the next. The 185 tests run offline against saved real pages, so a change to a parser or a rule is checked without touching the network. Each brief placed the work in the whole system: the files it touched, the rules every slice keeps, and the checks that prove it's done. Those rules and a map of the code are committed as AGENTS.md, so another developer, or their own agent, can pick up the codebase quickly. The README's table shows what can be customized, where, and what to rerun. I kept a decision log throughout, and this document condenses it.
 
 ## 6. What I'd do with another 8 hours
 

@@ -169,20 +169,20 @@ def briefed_top_leads(session: Session, top_n: int) -> list[LeadRow]:
     """Every lead in any preset's top_n that has a brief, with its tags: the leads Top leads steps through.
 
     Leads in the most presets' tops come first, so the ones every preset picks lead the
-    list. Among leads in as many tops, the highest total under any of its presets comes
-    first. A top lead whose brief hasn't been written yet is left out.
+    list. Among leads in as many tops, the best place in any of its presets' rankings
+    comes first (1st before 3rd), and ties stay nearest first. Places, not totals, because
+    some presets' weights give higher totals than others. A top lead whose brief hasn't
+    been written yet is left out.
     """
-    presets = scoring.load_scoring_config().presets
+    top = top_leads(session, top_n)
     briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
-    scores = {score.contractor_id: score for score in session.scalars(select(Score))}
-    ranked = []  # (how many tops it's in, its best total, the lead)
-    for lead in list_leads(session, top_n=top_n):
-        # A lead carries a preset's name as a tag exactly when it's in that preset's top_n.
-        top_presets = [tag for tag in lead.tags if tag in presets]
-        if top_presets and lead.gaf_id in briefed:
-            best_total = max(scoring.total(scores[lead.gaf_id], presets[name]) for name in top_presets)
-            ranked.append((len(top_presets), best_total, lead))
-    ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    ranked = []  # (how many tops it's in, its best place in them, counting from 0, the lead)
+    for lead in _rows(session):  # nearest first, so the sort below keeps ties nearest first
+        places = [ids.index(lead.gaf_id) for ids in top.values() if lead.gaf_id in ids]
+        if places and lead.gaf_id in briefed:
+            lead.tags = _tags(lead, top)
+            ranked.append((len(places), min(places), lead))
+    ranked.sort(key=lambda entry: (-entry[0], entry[1]))
     return [lead for _, _, lead in ranked]
 
 

@@ -239,7 +239,7 @@ def test_briefed_top_leads_keeps_the_top_n_leads_that_have_a_brief(session: Sess
     leads = briefed_top_leads(session, top_n=3)
 
     # unbriefed is in the top 3 but has no brief; outside has a brief but isn't in the top 3.
-    assert ids(leads) == ["first", "third"]  # in as many tops, so the higher total first
+    assert ids(leads) == ["first", "third"]  # in as many tops, so the better place first
     assert leads[0].tags == ["Balanced", "Big accounts", "Quick wins"]
 
 
@@ -257,6 +257,34 @@ def test_briefed_top_leads_puts_leads_in_more_presets_tops_first(session: Sessio
 
     # steady tops two presets, so it comes first, though quick's 75 beats its 60.
     assert [(lead.gaf_id, lead.tags) for lead in leads] == [("steady", ["Balanced", "Big accounts"]), ("quick", ["Quick wins"])]
+
+
+def test_briefed_top_leads_puts_the_better_place_first_not_the_higher_total(session: Session) -> None:
+    run = make_run(session)
+    # Totals under Balanced / Big accounts / Quick wins, and where each places in a top 2:
+    #   leader       70.0 / 85.0 / 55.0   Balanced 1st, Big accounts 1st
+    #   all_rounder  60.0 / 60.0 / 60.0   Balanced 2nd, Quick wins 2nd
+    #   big_second   52.5 / 70.0 / 35.0   Big accounts 2nd only
+    #   quick_first  42.0 / 24.0 / 63.0   Quick wins 1st only
+    components = [
+        ("leader", 100, 0, 100, 100),
+        ("all_rounder", 60, 60, 60, 60),
+        ("big_second", 100, 0, 50, 50),
+        ("quick_first", 0, 100, 0, 60),
+    ]
+    for gaf_id, value, winnability, stability, distance in components:
+        add_contractor(session, run, gaf_id)
+        session.add(
+            Score(contractor_id=gaf_id, value=value, winnability=winnability, stability=stability, distance=distance, flags=[], reasons={}, rules_version="test")
+        )
+    session.flush()
+    add_brief(session, "big_second")
+    add_brief(session, "quick_first")
+
+    leads = briefed_top_leads(session, top_n=2)
+
+    # Each is in one top: quick_first placed 1st, so it comes first, though big_second's 70 beats its 63.
+    assert [(lead.gaf_id, lead.tags) for lead in leads] == [("quick_first", ["Quick wins"]), ("big_second", ["Big accounts"])]
 
 
 def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> None:
