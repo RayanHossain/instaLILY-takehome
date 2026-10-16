@@ -2,7 +2,7 @@
 An AI sales-intelligence tool for a roofing distributor. A batch pipeline finds GAF-certified roofing contractors near a branch, enriches them, scores them, and writes briefs; a Streamlit app shows reps a ranked lead list. README.md covers running and customizing it; DESIGN.md covers how it's designed and why.
 
 # Stack
-Python 3.11+, SQLAlchemy 2.0 (typed ORM models), Alembic (render_as_batch=True), Pydantic v2 with pydantic-settings, httpx, PyYAML, beautifulsoup4 (GAF profile pages), pytest, argparse for the CLI, Streamlit (the rep UI), google-genai (the Gemini API SDK, used only in app/ai). Versions are pinned in requirements.txt.
+Python 3.11+, SQLAlchemy 2.0 (typed ORM models), Alembic (render_as_batch=True), Pydantic v2 with pydantic-settings, httpx, PyYAML, beautifulsoup4 (GAF profile pages), pytest, argparse for the CLI, Streamlit (the rep UI), pandas (only to tint the selected row in the All leads table), google-genai (the Gemini API SDK, used only in app/ai). Versions are pinned in requirements.txt.
 
 # Rules
 - SQLite at data/leads.db via DATABASE_URL; data/ is gitignored. seed/leads.db is the committed starting copy. Stay portable to Postgres: SQLAlchemy types only, no raw SQLite SQL.

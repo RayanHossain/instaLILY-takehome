@@ -11,6 +11,7 @@ never does.
 import re
 import textwrap
 
+import pandas as pd
 import streamlit as st
 
 from app.ui import data
@@ -49,6 +50,8 @@ DETAIL_SCROLLBAR_CSS = """<style>
 # Each tag's chip color, by kind: preset names amber, tiers blue, an opportunity green, a risk
 # red. Translucent, so the chips read in light and dark mode.
 PRESET_TAG_COLOR = "rgba(240, 160, 0, 0.4)"  # every preset name, e.g. "Balanced"
+# The selected lead's row in the All leads table: the accent blue, translucent for light and dark mode.
+SELECTED_ROW_TINT = "background-color: rgba(47, 111, 219, 0.15)"
 TAG_COLORS = {
     "President's Club": "rgba(47, 111, 219, 0.3)",
     "Master Elite": "rgba(47, 111, 219, 0.3)",
@@ -91,13 +94,12 @@ def show_history(notes: list[data.Note]) -> None:
 def remember_pick() -> None:
     """Store the clicked lead's id. Row positions change with every filter, sort, and preset; ids don't.
 
-    A click on any cell picks its row, so the rep needn't aim for the radio column. The next
-    run selects that row and clears the cell.
+    The table takes cell clicks, so a click anywhere in a row picks that lead. The next run
+    tints the lead's row and outlines its name.
     """
-    selection, ids = st.session_state.lead_table["selection"], st.session_state.shown_ids
-    rows = [row for row, _column in selection["cells"]] or selection["rows"]
-    if rows and rows[0] < len(ids):
-        st.session_state.lead_id = ids[rows[0]]
+    cells, ids = st.session_state.lead_table["selection"]["cells"], st.session_state.shown_ids
+    if cells and cells[0][0] < len(ids):  # no cells when the rep clicked the outlined name again
+        st.session_state.lead_id = ids[cells[0][0]]
 
 
 def step_lead(selected_key: str, step: int) -> None:
@@ -395,19 +397,19 @@ def all_leads_page() -> None:
             st.info("No leads here. Try another status, search, or wider filters.")
             return
 
-        # The selected lead is remembered by id. Every run points the table's selection at that
-        # lead's current row, so a filter, a re-sort, a preset switch, or a save never shows a
-        # different lead. When the lead leaves the list, the panel moves to the top lead.
+        # The selected lead is remembered by id. Every run tints that lead's current row and puts
+        # the table's selection on its name, so a filter, a re-sort, a preset switch, or a save
+        # never shows a different lead. When the lead leaves the list, the panel moves to the top lead.
         ids = [lead.gaf_id for lead in leads]
         st.session_state.shown_ids = ids
         if st.session_state.get("lead_id") not in ids:  # the first run, or the lead left the list
             st.session_state.lead_id = ids[0]
         position = ids.index(st.session_state.lead_id)
-        st.session_state.lead_table = {"selection": {"rows": [position], "columns": [], "cells": []}}
+        st.session_state.lead_table = {"selection": {"rows": [], "columns": [], "cells": [(position, "Contractor")]}}
         next_id = ids[position + 1] if position + 1 < len(ids) else None
 
         tags = data.all_tags()
-        st.dataframe(
+        table = pd.DataFrame(
             [
                 {
                     "Score": None if lead.score is None else round(lead.score.total),
@@ -418,12 +420,17 @@ def all_leads_page() -> None:
                     "Tags": lead.tags,
                 }
                 for lead in leads
-            ],
+            ]
+        )
+        # Streamlit's table can't style a whole row, but a pandas Styler can: it tints the selected one.
+        styled = table.style.apply(lambda row: [SELECTED_ROW_TINT if row.name == position else "" for _ in row], axis=1)
+        st.dataframe(
+            styled,
             column_config={
                 # No color: "auto" paints every score under 50 red, which reads as a bad lead.
                 "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d", width=64),
                 "Brief": st.column_config.TextColumn(width=52, help="✓: has a brief, written for a preset's top leads"),
-                "Contractor": st.column_config.TextColumn(width=180),
+                "Contractor": st.column_config.TextColumn(width=210),  # the radio column's old room
                 "Area": st.column_config.TextColumn(width=110),
                 "Mi": st.column_config.NumberColumn(format="%.1f", width=42),
                 "Tags": st.column_config.MultiselectColumn(options=tags, color=[TAG_COLORS.get(tag, PRESET_TAG_COLOR) for tag in tags]),
@@ -433,7 +440,7 @@ def all_leads_page() -> None:
             placeholder=DASH,
             key="lead_table",
             on_select=remember_pick,
-            selection_mode=["single-row-required", "single-cell"],
+            selection_mode="single-cell",  # no row selection, so no radio column
         )
 
     with detail_column:

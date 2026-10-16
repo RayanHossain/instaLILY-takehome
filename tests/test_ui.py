@@ -83,6 +83,11 @@ def shown_lead(app: AppTest) -> str:
     return app.main.subheader[0].value
 
 
+def selected_row(app: AppTest) -> int:
+    """The All leads table row the page selected: the row of the outlined name cell, which it also tints."""
+    return app.session_state["lead_table"]["selection"]["cells"][0][0]
+
+
 def open_all_leads(app: AppTest) -> AppTest:
     """Run the app, then open the All leads page. AppTest switches pages only after a first run."""
     return app.run().switch_page(ALL_LEADS).run()
@@ -162,11 +167,11 @@ def test_the_selected_lead_survives_a_filter_change(app: AppTest) -> None:
     # Gamma moves from the third row to the first; the panel stays on Gamma.
     app.sidebar.text_input[0].input("gamma").run()
     assert shown_lead(app) == "Gamma Roofing"
-    assert app.session_state["lead_table"]["selection"]["rows"] == [0]
+    assert selected_row(app) == 0
 
     app.sidebar.text_input[0].input("").run()
     assert shown_lead(app) == "Gamma Roofing"
-    assert app.session_state["lead_table"]["selection"]["rows"] == [2]
+    assert selected_row(app) == 2
 
 
 def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> None:
@@ -181,12 +186,12 @@ def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> No
 def test_the_selected_lead_survives_a_preset_switch_that_re_sorts_the_table(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
     open_all_leads(app)
-    assert app.session_state["lead_table"]["selection"]["rows"] == [2]  # Balanced: Alpha, Beta, Gamma
+    assert selected_row(app) == 2  # Balanced: Alpha, Beta, Gamma
 
     app.segmented_control(key="preset").set_value("Quick wins").run()
 
     assert shown_lead(app) == "Gamma Roofing"
-    assert app.session_state["lead_table"]["selection"]["rows"] == [1]  # Quick wins: Beta, Gamma, Alpha
+    assert selected_row(app) == 1  # Quick wins: Beta, Gamma, Alpha
 
 
 def test_a_link_with_a_preset_opens_all_leads_ranked_by_it(app: AppTest) -> None:

@@ -114,7 +114,7 @@ The principle is that a rep should know the next step within seconds of opening 
 - The app opens on Top leads: one lead at a time from every preset's top 10, with its brief and its score's reasons side by side, so nothing hides behind a tab or a scrollbar. Why each step of the brief fits shows on hover, which keeps every top lead on one screen. Previous and Next step through them: the leads more presets pick come first, then the ones placed highest in a preset, so the rep has no preset to choose.
 - Top leads shows only leads with a brief, so every lead on it comes with a plan.
 - Tags name only exceptions: the presets whose top 10 a lead is in, a tier above Certified, or New business.
-- All leads, the second page, keeps every contractor: the table, ranked by the preset the rep picks, on the left and the selected lead on the right, in tabs. A tick marks the leads with a brief, and a click anywhere on a row opens that lead.
+- All leads, the second page, keeps every contractor: the table, ranked by the preset the rep picks, on the left and the selected lead on the right, in tabs. A tick marks the leads with a brief, and a click anywhere on a row opens that lead and tints its row.
 - On All leads, a filter counts leads by stage, so the list shrinks as the rep works.
 - Search by name or phone doubles as a lookup when a contractor calls in.
 - A call sheet is the one place to log a call or a note. It logs the outcome, shows the history as status changes (New → Contacted), and opens the next lead.
