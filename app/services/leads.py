@@ -20,7 +20,7 @@ from app.settings import load_territory
 
 # GAF's contractor tiers, highest first.
 TIERS = ["President's Club", "Master Elite", "Certified Plus", "Certified"]
-# The tags a lead can carry besides the set names, rarest first, so a narrow column cuts off
+# The tags a lead can carry besides the preset names, rarest first, so a narrow column cuts off
 # the common ones. Tags name only exceptions, so "Certified", the most common tier, gets none.
 OTHER_TAGS = ["New business", "Low rating", "President's Club", "Master Elite", "Certified Plus"]
 
@@ -99,7 +99,8 @@ class LeadDetail(BaseModel):
     about_text: str | None
     score: LeadScore | None
     reasons: dict[str, list[Signal]] | None  # each component's signals; None until scored
-    brief: Brief | None  # its latest brief, only while it's in a preset's top N under the current scores
+    top_presets: list[str]  # the presets whose top N it's in under the current scores, shown as tags
+    brief: Brief | None  # its latest brief, only while it's in a preset's top N
     facts: list[LeadFact]  # every fact extracted about it; a brief cites some of them by id
 
 
@@ -147,7 +148,7 @@ def list_leads(
             None uses the default, Balanced.
         sort: "distance" for nearest first, or "total" for highest total first. Leads not
             scored yet sort last.
-        top_n: How many leads each preset's top takes, for the set tags. The UI passes
+        top_n: How many leads each preset's top takes, for the preset tags. The UI passes
             TOP_LEADS_PER_PRESET, the number the brief stage uses.
 
     Returns:
@@ -180,10 +181,10 @@ def briefed_top_leads(session: Session, preset: str | None, top_n: int) -> list[
 
 
 def all_tags() -> list[str]:
-    """Every tag a lead can carry, in the order they show: the set names, then OTHER_TAGS.
+    """Every tag a lead can carry, in the order they show: the preset names, then OTHER_TAGS.
 
-    A set's name tags the leads in its top N. The set names are the presets in
-    config/scoring.yaml, so a new preset gets its own tag.
+    A preset's name tags the leads in its top N. The names come from config/scoring.yaml,
+    so a new preset gets its own tag.
     """
     return [*scoring.load_scoring_config().presets, *OTHER_TAGS]
 
@@ -262,11 +263,11 @@ def _rows(
 
 
 def _tags(lead: LeadRow, top: dict[str, list[str]]) -> list[str]:
-    """The lead's exceptions, in the order of all_tags(): each set whose top N it's in, its flags, and its tier unless plain Certified."""
-    sets = [preset for preset, ids in top.items() if lead.gaf_id in ids]
+    """The lead's exceptions, in the order of all_tags(): each preset whose top N it's in, its flags, and its tier unless plain Certified."""
+    top_presets = [preset for preset, ids in top.items() if lead.gaf_id in ids]
     others = [lead.tier] if lead.tier in OTHER_TAGS else []
     others += [flag["flag"] for flag in lead.score.flags] if lead.score else []
-    return sets + sorted(others, key=OTHER_TAGS.index)
+    return top_presets + sorted(others, key=OTHER_TAGS.index)
 
 
 def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: int = 10) -> LeadDetail:
@@ -285,7 +286,7 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
     preset_name, weights = _preset(preset)
     score = session.get(Score, gaf_id)
     stored_brief = session.get(ContractorBrief, gaf_id)
-    in_a_top = any(gaf_id in ids for ids in top_leads(session, top_n).values())
+    top_presets = [name for name, ids in top_leads(session, top_n).items() if gaf_id in ids]
     facts = session.scalars(select(Fact).where(Fact.contractor_id == gaf_id).order_by(Fact.id))
     founded_year, _ = scoring.founding_year(contractor.in_business_since)
 
@@ -308,7 +309,8 @@ def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: in
         about_text=contractor.about_text,
         score=_lead_score(score, preset_name, weights),
         reasons={component: [Signal(**signal) for signal in signals] for component, signals in score.reasons.items()} if score else None,
-        brief=Brief.model_validate(stored_brief.content) if stored_brief and in_a_top else None,
+        top_presets=top_presets,
+        brief=Brief.model_validate(stored_brief.content) if stored_brief and top_presets else None,
         facts=[
             LeadFact(id=fact.id, field=fact.field, value=fact.value, quote=fact.evidence, source=fact.source, source_url=fact.source_url)
             for fact in facts

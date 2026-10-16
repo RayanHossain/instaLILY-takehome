@@ -6,21 +6,24 @@ import pytest
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
+from streamlit.testing.v1.element_tree import Button
 
 from app.db.models import Contractor, ContractorBrief, Fact, Rep, Run, Score
 from app.services.notes import lead_notes
 from app.settings import load_territory
 
 ENTRY_POINT = Path(__file__).parent.parent / "streamlit_app.py"  # what `streamlit run` runs
+ALL_LEADS = "app_pages/all_leads.py"  # the All leads page, relative to ENTRY_POINT
 TERRITORY = load_territory()
 
 
 @pytest.fixture
 def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> AppTest:
-    """The page, not yet run, on a database with three scored contractors.
+    """The app, not yet run, on a database with three scored contractors.
 
     Balanced ranks them Alpha, Beta, Gamma; Quick wins ranks them Beta, Gamma, Alpha.
-    Alpha has a brief; Gamma has none, but has one fact and the only website.
+    Alpha and Beta have briefs, so they're the Top leads; Gamma has none, but has one fact
+    and the only website.
     """
     run = Run(territory_zip="10013", radius_miles=25)
     session.add(run)
@@ -53,7 +56,8 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
         "selling_points": [],
         "cited_fact_ids": [],
     }
-    session.add(ContractorBrief(contractor_id="1", content=brief, input_hash="0" * 64, model="test", prompt_version="test"))
+    for gaf_id in ["1", "2"]:
+        session.add(ContractorBrief(contractor_id=gaf_id, content=brief, input_hash="0" * 64, model="test", prompt_version="test"))
     session.add(
         Fact(
             contractor_id="3",
@@ -75,14 +79,70 @@ def app(engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch) -> Ap
 
 
 def shown_lead(app: AppTest) -> str:
-    """The name in the detail panel's header."""
+    """The name in the lead's header."""
     return app.main.subheader[0].value
 
 
-def test_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
+def open_all_leads(app: AppTest) -> AppTest:
+    """Run the app, then open the All leads page. AppTest switches pages only after a first run."""
+    return app.run().switch_page(ALL_LEADS).run()
+
+
+def labelled(app: AppTest, label: str) -> Button:
+    """The button with this label."""
+    return next(button for button in app.button if button.label == label)
+
+
+def test_the_landing_page_shows_one_top_lead_with_its_brief(app: AppTest) -> None:
     app.run()
 
     assert not app.exception
+    assert app.header[0].value == "Top leads"
+    assert not app.dataframe  # no table: one lead at a time
+    assert shown_lead(app) == "Alpha Roofing"
+    assert app.caption[0].value == "Lead 1 of 2 from Balanced's top 10 · Status: **New**"
+    assert any("Atlantic Ave" in markdown.value for markdown in app.markdown)  # the brief, no tab to click
+    # Alpha is in every preset's top 10, so it carries every preset's name as a tag.
+    assert [markdown.value for markdown in app.markdown if "orange-badge" in markdown.value] == [
+        ":orange-badge[Balanced]",
+        ":orange-badge[Big accounts]",
+        ":orange-badge[Quick wins]",
+    ]
+
+
+def test_next_and_previous_step_through_the_top_leads_and_stop_at_the_ends(app: AppTest) -> None:
+    app.run()
+    assert labelled(app, "Previous").disabled
+
+    labelled(app, "Next").click().run()
+    assert shown_lead(app) == "Beta Roofing"
+    assert app.caption[0].value.startswith("Lead 2 of 2")
+    assert labelled(app, "Next").disabled  # Gamma has no brief, so Beta is the last
+
+    labelled(app, "Previous").click().run()
+    assert shown_lead(app) == "Alpha Roofing"
+
+
+def test_logging_a_call_on_the_landing_page_opens_the_next_top_lead(app: AppTest, session: Session) -> None:
+    app.run()
+    labelled(app, "Call").click().run()
+
+    app.segmented_control(key="outcome_1").set_value("Contacted")
+    labelled(app, "Log call").click().run()
+
+    assert [note.status for note in lead_notes(session, 1, "1")] == ["Contacted"]
+    assert shown_lead(app) == "Beta Roofing"
+    assert any(button.label == "Log call" for button in app.button)  # Beta's call sheet is open
+    # Alpha stays on the page, now Contacted.
+    labelled(app, "Previous").click().run()
+    assert app.caption[0].value == "Lead 1 of 2 from Balanced's top 10 · Status: **Contacted**"
+
+
+def test_the_all_leads_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
+    open_all_leads(app)
+
+    assert not app.exception
+    assert app.header[0].value == "All leads"
     assert len(app.dataframe[0].value) == 3
     assert shown_lead(app) == "Alpha Roofing"
     assert [tab.label for tab in app.tabs] == ["Why", "Brief", "Notes"]
@@ -90,7 +150,7 @@ def test_page_lists_the_leads_and_selects_the_first(app: AppTest) -> None:
 
 def test_the_selected_lead_survives_a_filter_change(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
     assert shown_lead(app) == "Gamma Roofing"
 
     # Gamma moves from the third row to the first; the panel stays on Gamma.
@@ -105,7 +165,7 @@ def test_the_selected_lead_survives_a_filter_change(app: AppTest) -> None:
 
 def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
 
     app.sidebar.text_input[0].input("beta").run()
 
@@ -114,7 +174,7 @@ def test_a_lead_filtered_out_hands_the_panel_to_the_top_lead(app: AppTest) -> No
 
 def test_the_selected_lead_survives_a_preset_switch_that_re_sorts_the_table(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
     assert app.session_state["lead_table"]["selection"]["rows"] == [2]  # Balanced: Alpha, Beta, Gamma
 
     app.segmented_control(key="preset").set_value("Quick wins").run()
@@ -133,14 +193,14 @@ def test_a_link_with_a_preset_opens_the_page_ranked_by_it(app: AppTest) -> None:
 
 def test_a_lead_without_a_brief_shows_brief_none_and_its_facts(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
 
     assert app.tabs[1].label == "Brief (none)"
     assert any("Slate roof repair" in markdown.value for markdown in app.tabs[1].markdown)
 
 
 def test_a_lead_with_a_brief_shows_its_opener(app: AppTest) -> None:
-    app.run()  # Alpha, the top lead, is selected
+    open_all_leads(app)  # Alpha, the top lead, is selected
 
     assert app.tabs[1].label == "Brief"
     assert any("Atlantic Ave" in markdown.value for markdown in app.tabs[1].markdown)
@@ -156,7 +216,7 @@ def save_status(app: AppTest, status: str, note: str) -> None:
 
 def test_the_selected_lead_survives_a_saved_status(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
     app.segmented_control(key="status_group").set_value("All").run()
 
     save_status(app, "Contacted", "Left a voicemail.")
@@ -168,7 +228,7 @@ def test_the_selected_lead_survives_a_saved_status(app: AppTest) -> None:
 
 def test_a_save_that_moves_the_lead_out_of_the_filter_moves_the_panel_to_the_top_lead(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()  # To contact: every lead is New
+    open_all_leads(app)  # To contact: every lead is New
 
     save_status(app, "Considering us", "Asked for a quote.")
 
@@ -190,7 +250,7 @@ def test_the_preset_is_saved_for_the_rep_and_restored_next_visit(app: AppTest, s
 
 
 def test_the_header_links_the_website_only_when_there_is_one(app: AppTest) -> None:
-    app.run()  # Alpha: no website
+    open_all_leads(app)  # Alpha: no website
     assert [button.label for button in app.main.get("link_button")] == ["GAF profile"]
 
     app.session_state["lead_id"] = "3"
@@ -199,12 +259,12 @@ def test_the_header_links_the_website_only_when_there_is_one(app: AppTest) -> No
 
 
 def test_logging_a_call_saves_the_outcome_and_opens_the_next_lead(app: AppTest, session: Session) -> None:
-    app.run()  # Alpha, the top lead, is selected
-    next(button for button in app.button if button.label == "Call").click().run()
+    open_all_leads(app)  # Alpha, the top lead, is selected
+    labelled(app, "Call").click().run()
 
     app.segmented_control(key="outcome_1").set_value("Contacted")
     app.text_area(key="call_note_1").set_value("Left a voicemail.")
-    next(button for button in app.button if button.label == "Log call").click().run()
+    labelled(app, "Log call").click().run()
 
     assert [(note.status, note.text) for note in lead_notes(session, 1, "1")] == [("Contacted", "Left a voicemail.")]
     assert shown_lead(app) == "Beta Roofing"  # the next lead, and its call sheet opens
@@ -212,23 +272,22 @@ def test_logging_a_call_saves_the_outcome_and_opens_the_next_lead(app: AppTest, 
     assert len(app.dataframe[0].value) == 2  # Alpha left To contact
 
 
-def test_j_and_k_move_down_and_up_the_table(app: AppTest) -> None:
-    app.run()
-    down = next(button for button in app.button if button.help == "Next lead (J)")
-    down.click().run()
+def test_next_and_previous_move_down_and_up_the_table(app: AppTest) -> None:
+    open_all_leads(app)
+    labelled(app, "Next").click().run()
     assert shown_lead(app) == "Beta Roofing"
 
-    next(button for button in app.button if button.help == "Previous lead (K)").click().run()
+    labelled(app, "Previous").click().run()
     assert shown_lead(app) == "Alpha Roofing"
 
 
 def test_the_call_sheet_starts_on_the_leads_current_status(app: AppTest) -> None:
     app.session_state["lead_id"] = "3"
-    app.run()
+    open_all_leads(app)
     app.segmented_control(key="status_group").set_value("All").run()
     save_status(app, "Considering us", "Asked for a quote.")
 
-    next(button for button in app.button if button.label == "Call").click().run()
+    labelled(app, "Call").click().run()
 
     assert app.segmented_control(key="outcome_3").value == "Considering us"
 

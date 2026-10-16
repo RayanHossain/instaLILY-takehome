@@ -1,9 +1,11 @@
-"""The rep's lead list: contractors ranked by a preset, and the selected one's details.
+"""The rep's two pages: Top leads, the landing page, and All leads, the full ranked table.
 
 streamlit_app.py at the repo root calls main() on every rerun:
     streamlit run streamlit_app.py
-Every read goes through app/ui/data.py. The page fits one 1440x900 laptop screen: the
-table and the detail tabs scroll on their own, so the page never does.
+main() draws what both pages share, then runs the page the rep is on; each page's file in
+app_pages/ calls its function here. Every read goes through app/ui/data.py. Each page fits
+one 1440x900 laptop screen: the table and the detail boxes scroll on their own, so the page
+never does.
 """
 
 import re
@@ -13,8 +15,10 @@ import streamlit as st
 from app.ui import data
 
 DASH = "—"  # shown for a missing value
-# Each detail tab scrolls inside a bordered box of this height, with the scrollbar below.
+# On All leads, each detail tab scrolls inside a bordered box of this height, with the scrollbar below.
 TAB_HEIGHT = 310
+# On Top leads, the brief, the score, and the notes sit side by side in bordered boxes this tall.
+TOP_BOX_HEIGHT = 470
 # Streamlit keeps a scrolling container's scrollbar hidden until the mouse is over it, and
 # macOS hides it until you scroll, so a box cut off between two sections looked finished.
 # This keeps a scrollbar showing in the detail boxes whenever there's more below. It targets
@@ -40,9 +44,9 @@ DETAIL_SCROLLBAR_CSS = """<style>
 }
 </style>"""
 
-# Each tag's chip color, by kind: set names amber, tiers blue, an opportunity green, a risk
+# Each tag's chip color, by kind: preset names amber, tiers blue, an opportunity green, a risk
 # red. Translucent, so the chips read in light and dark mode.
-SET_TAG_COLOR = "rgba(240, 160, 0, 0.4)"  # every set name, e.g. "Balanced"
+PRESET_TAG_COLOR = "rgba(240, 160, 0, 0.4)"  # every preset name, e.g. "Balanced"
 TAG_COLORS = {
     "President's Club": "rgba(47, 111, 219, 0.3)",
     "Master Elite": "rgba(47, 111, 219, 0.3)",
@@ -70,30 +74,37 @@ def remember_pick() -> None:
         st.session_state.lead_id = ids[rows[0]]
 
 
-def step_lead(step: int) -> None:
-    """Move the selection one lead down the table (J, step 1) or up it (K, step -1)."""
+def step_lead(selected_key: str, step: int) -> None:
+    """Move the page's selected lead one down its list (Next, step 1) or up it (Previous, step -1).
+
+    Args:
+        selected_key: The session state key holding the page's selected lead: "top_lead_id"
+            on Top leads, "lead_id" on All leads.
+        step: 1 for the next lead, -1 for the previous one.
+    """
     ids = st.session_state.shown_ids
-    position = ids.index(st.session_state.lead_id) + step
-    st.session_state.lead_id = ids[min(max(position, 0), len(ids) - 1)]
+    position = ids.index(st.session_state[selected_key]) + step
+    st.session_state[selected_key] = ids[min(max(position, 0), len(ids) - 1)]
 
 
-def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None) -> None:
+def log_call(rep_id: int, gaf_id: str, name: str, next_id: str | None, selected_key: str) -> None:
     """Save the call sheet's outcome and note through the services, then queue the next lead's call sheet."""
     outcome = st.session_state[f"outcome_{gaf_id}"]
     data.add_note(rep_id, gaf_id, outcome, st.session_state[f"call_note_{gaf_id}"])
-    st.session_state.pop(f"status_{gaf_id}", None)  # the Notes tab's picker starts on the new status
+    st.session_state.pop(f"status_{gaf_id}", None)  # the Notes picker starts on the new status
     st.toast(f"Logged: {name} is now {outcome}")
     if next_id:
-        st.session_state.lead_id = next_id
-        st.session_state.call_next = True  # main() opens the next lead's call sheet
+        st.session_state[selected_key] = next_id
+        st.session_state.call_next = True  # the page opens the next lead's call sheet
 
 
 @st.dialog("Call sheet", width="medium", position="right")
-def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | None) -> None:
-    """The call sheet, a drawer beside the table: the opener, questions to tick off, follow-ups, and the outcome.
+def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | None, selected_key: str) -> None:
+    """The call sheet, a drawer beside the page: the opener, questions to tick off, follow-ups, and the outcome.
 
     "Log call" (Cmd+Enter) saves the outcome and note through the services, then opens
-    the next lead's call sheet.
+    the next lead's call sheet. selected_key is the page's selected-lead key, which
+    step_lead explains.
     """
     st.markdown(f"**{plain(lead.name)}**")
     if lead.phone:
@@ -113,13 +124,13 @@ def call_sheet(rep_id: int, lead: data.LeadDetail, status: str, next_id: str | N
     st.segmented_control("Outcome", data.STATUSES[1:], default=outcome, required=True, key=f"outcome_{lead.gaf_id}")
     st.text_area("Note", key=f"call_note_{lead.gaf_id}", placeholder="What did they say?")
     # log_call saves before anything redraws; the rerun then closes this sheet and redraws the page.
-    log_args = (rep_id, lead.gaf_id, lead.name, next_id)
+    log_args = (rep_id, lead.gaf_id, lead.name, next_id, selected_key)
     if st.button("Log call", key=f"log_{lead.gaf_id}", type="primary", shortcut="Cmd+Enter", on_click=log_call, args=log_args):
         st.rerun()
 
 
 def show_header(lead: data.LeadDetail) -> bool:
-    """The detail panel's header: the name with tier and flag badges, one caption line, the phone and links, and About.
+    """The lead's header: the name with preset, tier, and flag badges, one caption line, the phone and links, and About.
 
     Returns:
         True when the rep clicked Call.
@@ -127,6 +138,8 @@ def show_header(lead: data.LeadDetail) -> bool:
     with st.container(gap="xsmall"):
         with st.container(horizontal=True, vertical_alignment="center", gap="xsmall"):
             st.subheader(lead.name, anchor=False, width="content")
+            for preset in lead.top_presets:
+                st.badge(preset, color="orange", help=f"In {preset}'s top {data.top_leads_per_preset()}")
             if lead.tier:
                 st.badge(lead.tier, color="blue")
             for flag in lead.score.flags if lead.score else []:
@@ -218,16 +231,17 @@ def save_preset_choice(rep_id: int) -> None:
 def save_note(rep_id: int, gaf_id: str, name: str) -> None:
     """Save the Notes form: a note that sets the lead's status. Then say where the lead went.
 
-    It runs as the form's callback, before the page redraws, so the table already shows the save.
+    It runs as the form's callback, before the page redraws, so the page already shows the save.
     """
     status = st.session_state[f"status_{gaf_id}"]
     data.add_note(rep_id, gaf_id, status, st.session_state[f"note_{gaf_id}"])
     st.session_state[f"note_{gaf_id}"] = ""
     st.session_state.pop(f"outcome_{gaf_id}", None)  # the call sheet's outcome starts on the new status
     group = data.status_group(status)
-    if st.session_state.status_group in (group, "All"):
+    # Top leads has no status filter, so every lead stays on it.
+    if st.session_state.get("status_group", "All") in (group, "All"):
         st.toast(f"Saved: {name}")
-    else:  # the lead leaves the list, so the panel moves to the top lead
+    else:  # the lead leaves the All leads table, so the panel moves to the top lead
         st.toast(f"Saved: {name} is now {group}")
 
 
@@ -245,42 +259,71 @@ def show_notes(rep_id: int, lead: data.LeadDetail, status: str) -> None:
             st.markdown(plain(note.text))
 
 
-def main() -> None:
-    """Draw the page: sidebar filters, the preset, the status filter, the lead table, and the selected lead."""
-    st.set_page_config(page_title="Ridgeline Leads", layout="wide")
-    if data.database_missing():
-        st.error("No database yet. From the repo root, run: `mkdir -p data && cp seed/leads.db data/leads.db`")
-        st.stop()
+def top_leads_page() -> None:
+    """The landing page: the preset's top leads that have a brief, one at a time, with its brief, score, and notes side by side.
+
+    Previous (K) and Next (J) step through them, highest total first, and Log call opens
+    the next one. Every lead stays on the page whatever its status.
+    """
+    scoring = data.load_scoring_config()
+    rep = data.current_rep()
+    preset = st.session_state.preset  # main() draws the preset picker
+    leads = data.briefed_top_leads(preset)
+    if not leads:
+        st.info(f"None of {preset}'s top leads has a brief yet. Run the brief stage, or look through All leads.")
+        return
+
+    # This page keeps its own selected lead, apart from the All leads table's. A preset switch
+    # keeps the lead when it's in the new preset's list too; otherwise the page starts at the top.
+    ids = [lead.gaf_id for lead in leads]
+    st.session_state.shown_ids = ids
+    if st.session_state.get("top_lead_id") not in ids:
+        st.session_state.top_lead_id = ids[0]
+    position = ids.index(st.session_state.top_lead_id)
+    next_id = ids[position + 1] if position + 1 < len(ids) else None
+    status = data.current_statuses(rep.id, ids)[st.session_state.top_lead_id]
+
+    with st.container(horizontal=True, vertical_alignment="center"):
+        top_n = data.top_leads_per_preset()
+        st.caption(f"Lead {position + 1} of {len(ids)} from {preset}'s top {top_n} · Status: **{status}**")
+        st.space("stretch")
+        st.button("Previous", icon=":material/arrow_back:", shortcut="K", disabled=position == 0, on_click=step_lead, args=("top_lead_id", -1))
+        st.button("Next", icon=":material/arrow_forward:", shortcut="J", disabled=next_id is None, on_click=step_lead, args=("top_lead_id", 1))
+
+    lead = data.get_lead(st.session_state.top_lead_id, preset)
+    if show_header(lead) or st.session_state.pop("call_next", False):
+        call_sheet(rep.id, lead, status, next_id, "top_lead_id")
+
+    st.html(DETAIL_SCROLLBAR_CSS)
+    brief_column, why_column, notes_column = st.columns([5, 3, 3])
+    with brief_column:
+        st.markdown("**Brief**")
+        with st.container(height=TOP_BOX_HEIGHT, border=True, key="brief_box"):
+            show_brief(lead)
+    with why_column:
+        st.markdown("**Why**")
+        with st.container(height=TOP_BOX_HEIGHT, border=True, key="why_box"):
+            show_why(lead, scoring.presets[preset])
+    with notes_column:
+        st.markdown("**Notes**")
+        with st.container(height=TOP_BOX_HEIGHT, border=True, key="notes_box"):
+            show_notes(rep.id, lead, status)
+
+
+def all_leads_page() -> None:
+    """The All leads page: sidebar filters, the status filter, the lead table, and the selected lead."""
     territory = data.load_territory()
     radius = int(territory["radius_miles"])
     scoring = data.load_scoring_config()
     rep = data.current_rep()
+    preset = st.session_state.preset  # main() draws the preset picker
 
-    st.sidebar.subheader("Ridgeline Leads", anchor=False)
-    st.sidebar.caption(f"Signed in as **{rep.name}**")
     # live: the table filters as the rep types. type="search" adds a clear button.
     search = st.sidebar.text_input("Search", placeholder="Name or phone", type="search", live=True)
     tiers = st.sidebar.multiselect("Tier", data.TIERS, placeholder="All tiers")
     max_miles = st.sidebar.slider("Max distance", min_value=1, max_value=radius, value=radius, format="%d mi")
 
-    title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
-    with preset_column:
-        # Starts on the rep's saved preset. required: a second click can't unselect it.
-        # bind: ?preset=Quick+wins in the URL deep-links to a preset.
-        preset = st.segmented_control(
-            "Rank by",
-            list(scoring.presets),
-            default=rep.preset if rep.preset in scoring.presets else scoring.default_preset,
-            required=True,
-            key="preset",
-            bind="query-params",
-            on_change=save_preset_choice,
-            args=(rep.id,),
-            label_visibility="collapsed",
-        )
-
     leads = data.list_leads(search, tiers, max_miles, preset)
-    title_column.header("Roofing leads", anchor=False)
     noun = "contractor" if len(leads) == 1 else "contractors"
     st.caption(f"{len(leads)} {noun} near {territory['zip']}, within {max_miles} miles")
 
@@ -300,8 +343,8 @@ def main() -> None:
                 label_visibility="collapsed",
             )
             st.space("stretch")
-            st.button(":material/keyboard_arrow_up:", help="Previous lead (K)", shortcut="K", type="tertiary", on_click=step_lead, args=(-1,))
-            st.button(":material/keyboard_arrow_down:", help="Next lead (J)", shortcut="J", type="tertiary", on_click=step_lead, args=(1,))
+            st.button("Previous", icon=":material/keyboard_arrow_up:", shortcut="K", type="tertiary", on_click=step_lead, args=("lead_id", -1))
+            st.button("Next", icon=":material/keyboard_arrow_down:", shortcut="J", type="tertiary", on_click=step_lead, args=("lead_id", 1))
         leads = [lead for lead in leads if group == "All" or data.status_group(statuses[lead.gaf_id]) == group]
         if not leads:
             st.info("No leads here. Try another status, search, or wider filters.")
@@ -336,7 +379,7 @@ def main() -> None:
                 "Contractor": st.column_config.TextColumn(width=180),
                 "Area": st.column_config.TextColumn(width=110),
                 "Mi": st.column_config.NumberColumn(format="%.1f", width=42),
-                "Tags": st.column_config.MultiselectColumn(options=tags, color=[TAG_COLORS.get(tag, SET_TAG_COLOR) for tag in tags]),
+                "Tags": st.column_config.MultiselectColumn(options=tags, color=[TAG_COLORS.get(tag, PRESET_TAG_COLOR) for tag in tags]),
             },
             hide_index=True,
             height=560,
@@ -349,7 +392,7 @@ def main() -> None:
     with detail_column:
         lead = data.get_lead(st.session_state.lead_id, preset)
         if show_header(lead) or st.session_state.pop("call_next", False):
-            call_sheet(rep.id, lead, statuses[lead.gaf_id], next_id)
+            call_sheet(rep.id, lead, statuses[lead.gaf_id], next_id, "lead_id")
 
         why_tab, brief_tab, notes_tab = st.tabs(["Why", "Brief" if lead.brief else "Brief (none)", "Notes"])
         st.html(DETAIL_SCROLLBAR_CSS)
@@ -362,3 +405,43 @@ def main() -> None:
         with notes_tab:
             with st.container(height=TAB_HEIGHT, border=True, key="notes_box"):
                 show_notes(rep.id, lead, statuses[lead.gaf_id])
+
+
+def main() -> None:
+    """Draw what both pages share (the sidebar's name and rep, the page title, and the preset picker), then run the rep's page.
+
+    Top leads is the landing page. Each page's file in app_pages/ calls its function above.
+    """
+    st.set_page_config(page_title="Ridgeline Leads", layout="wide")
+    if data.database_missing():
+        st.error("No database yet. From the repo root, run: `mkdir -p data && cp seed/leads.db data/leads.db`")
+        st.stop()
+    scoring = data.load_scoring_config()
+    rep = data.current_rep()
+
+    page = st.navigation(
+        [
+            st.Page("app_pages/top_leads.py", title="Top leads", icon=":material/star:", default=True),
+            st.Page("app_pages/all_leads.py", title="All leads", icon=":material/table_rows:"),
+        ]
+    )
+    st.sidebar.subheader("Ridgeline Leads", anchor=False)
+    st.sidebar.caption(f"Signed in as **{rep.name}**")
+
+    title_column, preset_column = st.columns([3, 2], vertical_alignment="center")
+    title_column.header(page.title, anchor=False)
+    with preset_column:
+        # Starts on the rep's saved preset. required: a second click can't unselect it.
+        # bind: ?preset=Quick+wins in the URL deep-links to a preset.
+        st.segmented_control(
+            "Rank by",
+            list(scoring.presets),
+            default=rep.preset if rep.preset in scoring.presets else scoring.default_preset,
+            required=True,
+            key="preset",
+            bind="query-params",
+            on_change=save_preset_choice,
+            args=(rep.id,),
+            label_visibility="collapsed",
+        )
+    page.run()

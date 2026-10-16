@@ -206,12 +206,12 @@ def test_tags_name_only_the_exceptions(session: Session) -> None:
     tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=1)}
     assert tags == {"star": ["Balanced", "Big accounts", "Quick wins", "Master Elite"], "other": ["New business"]}
 
-    # In every preset's top 2, the other lead carries every set's name too.
+    # In every preset's top 2, the other lead carries every preset's name too.
     tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=2)}
     assert tags["other"] == ["Balanced", "Big accounts", "Quick wins", "New business"]
 
 
-def test_a_set_tag_names_only_the_sets_whose_top_n_the_lead_is_in(session: Session) -> None:
+def test_a_preset_tag_names_only_the_presets_whose_top_n_the_lead_is_in(session: Session) -> None:
     run = make_run(session)
     add_contractor(session, run, "big")
     add_contractor(session, run, "quick")
@@ -254,8 +254,11 @@ def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> No
     session.add(Fact(contractor_id="fallen", field="services", value="Roof replacement", evidence="We replace roofs.", source="homepage", source_url="https://fallen.example", model="test", prompt_version="test"))
     session.flush()
 
-    assert get_lead(session, "star", top_n=1).brief is not None
+    star = get_lead(session, "star", top_n=1)
+    assert star.brief is not None
+    assert star.top_presets == ["Balanced", "Big accounts", "Quick wins"]
     fallen = get_lead(session, "fallen", top_n=1)
     assert fallen.brief is None
+    assert fallen.top_presets == []
     assert [(fact.value, fact.quote) for fact in fallen.facts] == [("Roof replacement", "We replace roofs.")]
     assert get_lead(session, "fallen", top_n=2).brief is not None  # back in a top 2
