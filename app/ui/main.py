@@ -40,16 +40,15 @@ DETAIL_SCROLLBAR_CSS = """<style>
 }
 </style>"""
 
-# Each tag's chip color, by kind: tiers blue, an opportunity green, a risk red, Top pick
-# amber, Brief violet. Translucent, so the chips read in light and dark mode.
+# Each tag's chip color, by kind: set names amber, tiers blue, an opportunity green, a risk
+# red. Translucent, so the chips read in light and dark mode.
+SET_TAG_COLOR = "rgba(240, 160, 0, 0.4)"  # every set name, e.g. "Balanced"
 TAG_COLORS = {
     "President's Club": "rgba(47, 111, 219, 0.3)",
     "Master Elite": "rgba(47, 111, 219, 0.3)",
     "Certified Plus": "rgba(47, 111, 219, 0.3)",
     "New business": "rgba(33, 160, 90, 0.3)",
     "Low rating": "rgba(220, 53, 69, 0.35)",
-    "Top pick": "rgba(240, 160, 0, 0.4)",
-    "Brief": "rgba(130, 90, 220, 0.3)",
 }
 
 
@@ -319,6 +318,7 @@ def main() -> None:
         st.session_state.lead_table = {"selection": {"rows": [position], "columns": [], "cells": []}}
         next_id = ids[position + 1] if position + 1 < len(ids) else None
 
+        tags = data.all_tags()
         st.dataframe(
             [
                 {
@@ -336,7 +336,7 @@ def main() -> None:
                 "Contractor": st.column_config.TextColumn(width=180),
                 "Area": st.column_config.TextColumn(width=110),
                 "Mi": st.column_config.NumberColumn(format="%.1f", width=42),
-                "Tags": st.column_config.MultiselectColumn(options=data.TAGS, color=[TAG_COLORS[tag] for tag in data.TAGS]),
+                "Tags": st.column_config.MultiselectColumn(options=tags, color=[TAG_COLORS.get(tag, SET_TAG_COLOR) for tag in tags]),
             },
             hide_index=True,
             height=560,

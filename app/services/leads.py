@@ -20,10 +20,9 @@ from app.settings import load_territory
 
 # GAF's contractor tiers, highest first.
 TIERS = ["President's Club", "Master Elite", "Certified Plus", "Certified"]
-# Every tag a lead can carry, rarest first, so a narrow column cuts off the common ones. Tags
-# name only exceptions, so "Certified", the most common tier, gets none. Top pick: in every
-# preset's top N. Brief: has a brief written while in a top N.
-TAGS = ["Top pick", "Brief", "New business", "Low rating", "President's Club", "Master Elite", "Certified Plus"]
+# The tags a lead can carry besides the set names, rarest first, so a narrow column cuts off
+# the common ones. Tags name only exceptions, so "Certified", the most common tier, gets none.
+OTHER_TAGS = ["New business", "Low rating", "President's Club", "Master Elite", "Certified Plus"]
 
 EARTH_RADIUS_MILES = 3958.8
 
@@ -54,7 +53,7 @@ class LeadRow(BaseModel):
     phone: str | None
     enrolled_in_gaf_leads: bool | None  # None means GAF didn't say
     score: LeadScore | None  # None until the score stage has scored the contractor
-    tags: list[str] = []  # from TAGS, in that order
+    tags: list[str] = []  # in the order of all_tags()
 
 
 class Signal(BaseModel):
@@ -148,8 +147,8 @@ def list_leads(
             None uses the default, Balanced.
         sort: "distance" for nearest first, or "total" for highest total first. Leads not
             scored yet sort last.
-        top_n: How many leads each preset's top takes, for the Top pick and Brief tags.
-            The UI passes TOP_LEADS_PER_PRESET, the number the brief stage uses.
+        top_n: How many leads each preset's top takes, for the set tags. The UI passes
+            TOP_LEADS_PER_PRESET, the number the brief stage uses.
 
     Returns:
         One LeadRow per matching contractor, with its tags.
@@ -158,11 +157,35 @@ def list_leads(
         ValueError: The preset isn't one in config/scoring.yaml.
     """
     top = top_leads(session, top_n)
-    briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
     leads = _rows(session, search, tiers, max_miles, preset, sort)
     for lead in leads:
-        lead.tags = _tags(lead, top, briefed)
+        lead.tags = _tags(lead, top)
     return leads
+
+
+def briefed_top_leads(session: Session, preset: str | None, top_n: int) -> list[LeadRow]:
+    """The preset's top_n leads that have a brief, highest total first, with their tags.
+
+    These are the leads the Top leads page steps through. A top lead whose brief hasn't
+    been written yet is left out, so the list can be shorter than top_n.
+
+    Raises:
+        ValueError: The preset isn't one in config/scoring.yaml.
+    """
+    preset_name, _ = _preset(preset)
+    briefed = set(session.scalars(select(ContractorBrief.contractor_id)))
+    leads = list_leads(session, preset=preset_name, sort="total", top_n=top_n)
+    # A lead carries the preset's name as a tag exactly when it's in the preset's top_n.
+    return [lead for lead in leads if preset_name in lead.tags and lead.gaf_id in briefed]
+
+
+def all_tags() -> list[str]:
+    """Every tag a lead can carry, in the order they show: the set names, then OTHER_TAGS.
+
+    A set's name tags the leads in its top N. The set names are the presets in
+    config/scoring.yaml, so a new preset gets its own tag.
+    """
+    return [*scoring.load_scoring_config().presets, *OTHER_TAGS]
 
 
 def top_leads(session: Session, top_n: int) -> dict[str, list[str]]:
@@ -238,17 +261,12 @@ def _rows(
     return leads
 
 
-def _tags(lead: LeadRow, top: dict[str, list[str]], briefed: set[str]) -> list[str]:
-    """The lead's exceptions, in the order of TAGS: Top pick, Brief, its flags, and its tier unless plain Certified."""
-    found = [lead.tier] if lead.tier in TAGS else []
-    found += [flag["flag"] for flag in lead.score.flags] if lead.score else []
-    in_top = [lead.gaf_id in ids for ids in top.values()]
-    if all(in_top):
-        found.append("Top pick")
-    # A brief written under older rules stays stored, but shows only while its lead is in a top N.
-    if any(in_top) and lead.gaf_id in briefed:
-        found.append("Brief")
-    return sorted(found, key=TAGS.index)
+def _tags(lead: LeadRow, top: dict[str, list[str]]) -> list[str]:
+    """The lead's exceptions, in the order of all_tags(): each set whose top N it's in, its flags, and its tier unless plain Certified."""
+    sets = [preset for preset, ids in top.items() if lead.gaf_id in ids]
+    others = [lead.tier] if lead.tier in OTHER_TAGS else []
+    others += [flag["flag"] for flag in lead.score.flags] if lead.score else []
+    return sets + sorted(others, key=OTHER_TAGS.index)
 
 
 def get_lead(session: Session, gaf_id: str, preset: str | None = None, top_n: int = 10) -> LeadDetail:

@@ -14,17 +14,16 @@ from sqlalchemy.orm import Session
 from app.db.engine import make_engine
 from app.scoring import Preset, load_scoring_config
 from app.services import leads, notes, reps
-from app.services.leads import TAGS, TIERS, LeadDetail, LeadFact, LeadRow
+from app.services.leads import TIERS, LeadDetail, LeadFact, LeadRow, all_tags
 from app.services.notes import STATUS_GROUPS, STATUSES, Note, status_group
 from app.services.reps import RepInfo
 from app.settings import Settings, load_territory
 
-# What main.py may use. The constants, the models (for type hints), load_scoring_config,
-# load_territory, and status_group are passed through unchanged.
+# What main.py may use. The constants, the models (for type hints), all_tags,
+# load_scoring_config, load_territory, and status_group are passed through unchanged.
 __all__ = [
     "STATUSES",
     "STATUS_GROUPS",
-    "TAGS",
     "TIERS",
     "LeadDetail",
     "LeadFact",
@@ -32,6 +31,8 @@ __all__ = [
     "Preset",
     "RepInfo",
     "add_note",
+    "all_tags",
+    "briefed_top_leads",
     "current_rep",
     "current_statuses",
     "database_missing",
@@ -93,6 +94,12 @@ def list_leads(search: str, tiers: list[str], max_miles: float, preset: str) -> 
             sort="total",
             top_n=Settings().top_leads_per_preset,
         )
+
+
+def briefed_top_leads(preset: str) -> list[LeadRow]:
+    """The Top leads page's leads: the preset's top N that have a brief, highest total first."""
+    with _open_session() as session:
+        return leads.briefed_top_leads(session, preset, Settings().top_leads_per_preset)
 
 
 def get_lead(gaf_id: str, preset: str) -> LeadDetail:

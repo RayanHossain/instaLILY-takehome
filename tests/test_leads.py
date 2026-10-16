@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.db.models import Contractor, ContractorBrief, Fact, Run, Score
-from app.services.leads import LeadRow, get_lead, list_leads, tier, top_leads
+from app.services.leads import LeadRow, briefed_top_leads, get_lead, list_leads, tier, top_leads
 from app.settings import load_territory
 from app.sources import coveo
 
@@ -201,16 +201,46 @@ def test_tags_name_only_the_exceptions(session: Session) -> None:
     add_contractor(session, run, "other")  # plain Certified: no tier tag
     add_score(session, "star", 90)
     add_score(session, "other", 50, flags=[{"flag": "New business", "kind": "opportunity", "reason": "founded 2025"}])
-    add_brief(session, "star")
-    add_brief(session, "other")  # written under older rules, when it was in a top N
 
     assert top_leads(session, 1) == {"Balanced": ["star"], "Big accounts": ["star"], "Quick wins": ["star"]}
     tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=1)}
-    assert tags == {"star": ["Top pick", "Brief", "Master Elite"], "other": ["New business"]}
+    assert tags == {"star": ["Balanced", "Big accounts", "Quick wins", "Master Elite"], "other": ["New business"]}
 
-    # In every preset's top 2, the other lead is a Top pick too, and its brief counts again.
+    # In every preset's top 2, the other lead carries every set's name too.
     tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=2)}
-    assert tags["other"] == ["Top pick", "Brief", "New business"]
+    assert tags["other"] == ["Balanced", "Big accounts", "Quick wins", "New business"]
+
+
+def test_a_set_tag_names_only_the_sets_whose_top_n_the_lead_is_in(session: Session) -> None:
+    run = make_run(session)
+    add_contractor(session, run, "big")
+    add_contractor(session, run, "quick")
+    # Totals: big scores 35 Balanced, 55 Big accounts, 15 Quick wins; quick scores 30, 15, 45.
+    for gaf_id, value, winnability in [("big", 100, 0), ("quick", 0, 100)]:
+        session.add(
+            Score(contractor_id=gaf_id, value=value, winnability=winnability, stability=0, distance=0, flags=[], reasons={}, rules_version="test")
+        )
+    session.flush()
+
+    tags = {lead.gaf_id: lead.tags for lead in list_leads(session, top_n=1)}
+
+    assert tags == {"big": ["Balanced", "Big accounts"], "quick": ["Quick wins"]}
+
+
+def test_briefed_top_leads_keeps_the_presets_top_n_that_have_a_brief(session: Session) -> None:
+    run = make_run(session)
+    for gaf_id, points in [("first", 90), ("unbriefed", 80), ("third", 70), ("outside", 60)]:
+        add_contractor(session, run, gaf_id)
+        add_score(session, gaf_id, points)
+    add_brief(session, "first")
+    add_brief(session, "third")
+    add_brief(session, "outside")  # written under older rules, when it was in a top N
+
+    leads = briefed_top_leads(session, "Quick wins", top_n=3)
+
+    # unbriefed is in the top 3 but has no brief; outside has a brief but isn't in the top 3.
+    assert ids(leads) == ["first", "third"]
+    assert leads[0].tags == ["Balanced", "Big accounts", "Quick wins"]
 
 
 def test_a_brief_shows_only_while_its_lead_is_in_a_top_n(session: Session) -> None:
